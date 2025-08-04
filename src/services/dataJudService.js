@@ -93,6 +93,35 @@ export const TRIBUNAIS = {
   TREDF: { alias: 'api_publica_tredf', nome: 'Tribunal Regional Eleitoral do Distrito Federal' }
 };
 
+// Função para organizar tribunais por categoria
+export const obterTribunaisPorCategoria = () => {
+  return {
+    'Tribunais Superiores': [
+      'STF', 'STJ', 'TST', 'TSE', 'STM'
+    ],
+    'Tribunais Regionais Federais': [
+      'TRF1', 'TRF2', 'TRF3', 'TRF4', 'TRF5', 'TRF6'
+    ],
+    'Tribunais de Justiça': [
+      'TJSP', 'TJRJ', 'TJMG', 'TJRS', 'TJPR', 'TJSC', 
+      'TJBA', 'TJGO', 'TJDF', 'TJPE', 'TJCE', 'TJMT', 
+      'TJMS', 'TJPB', 'TJAL', 'TJSE', 'TJRN', 'TJPI', 
+      'TJMA', 'TJPA', 'TJAP', 'TJAM', 'TJRR', 'TJAC', 
+      'TJRO', 'TJTO', 'TJES'
+    ],
+    'Tribunais Regionais do Trabalho': [
+      'TRT1', 'TRT2', 'TRT3', 'TRT4', 'TRT5', 'TRT6', 
+      'TRT7', 'TRT8', 'TRT9', 'TRT10', 'TRT11', 'TRT12', 
+      'TRT13', 'TRT14', 'TRT15', 'TRT16', 'TRT17', 'TRT18', 
+      'TRT19', 'TRT20', 'TRT21', 'TRT22', 'TRT23', 'TRT24'
+    ],
+    'Tribunais Regionais Eleitorais': [
+      'TRESP', 'TRERJ', 'TREMG', 'TRERS', 'TREPR', 
+      'TRESC', 'TREBA', 'TREGO', 'TREDF'
+    ]
+  };
+};
+
 // Função para fazer requisições REAIS à API DataJud do CNJ
 const makeRequestReal = async (endpoint, params = {}) => {
   console.log(`🌐 Buscando dados REAIS na API DataJud: ${endpoint}`);
@@ -515,6 +544,158 @@ export const buscarProcessosPorNome = async (nome, tribunais = []) => {
   }
 };
 
+// Função para buscar processos por advogado
+export const buscarProcessosPorAdvogado = async (nomeAdvogado, tribunais = []) => {
+  try {
+    console.log('🔍 Buscando processos REAIS por advogado:', nomeAdvogado);
+    
+    if (!nomeAdvogado || nomeAdvogado.trim().length < 3) {
+      throw new Error('Nome do advogado deve ter pelo menos 3 caracteres');
+    }
+    
+    const nomeFormatado = nomeAdvogado.trim();
+    
+    // Estratégia: Busca por advogado
+    try {
+      const resultadoAdvogado = await makeRequestReal('/processos/consulta/advogado', {
+        nome: nomeFormatado,
+        tribunais: tribunais.length > 0 ? tribunais.join(',') : undefined
+      });
+      
+      if (resultadoAdvogado.success && resultadoAdvogado.data) {
+        console.log('✅ Processos encontrados na busca por advogado');
+        return {
+          success: true,
+          data: Array.isArray(resultadoAdvogado.data) ? resultadoAdvogado.data : [resultadoAdvogado.data],
+          source: 'datajud-official',
+          isSimulated: false
+        };
+      }
+    } catch (error) {
+      console.warn('⚠️ Erro na busca por advogado:', error.message);
+    }
+    
+    // Fallback: sem resultados
+    return {
+      success: true,
+      data: [],
+      message: `Nenhum processo encontrado para o advogado "${nomeAdvogado}"`,
+      source: 'datajud-official',
+      isSimulated: false
+    };
+    
+  } catch (error) {
+    console.error('❌ Erro na busca por advogado:', error);
+    return {
+      success: false,
+      error: error.message,
+      data: [],
+      source: 'datajud-official'
+    };
+  }
+};
+
+// Função para buscar processos por parte
+export const buscarProcessosPorParte = async (nomeParte, tribunais = []) => {
+  try {
+    console.log('🔍 Buscando processos REAIS por parte:', nomeParte);
+    
+    if (!nomeParte || nomeParte.trim().length < 3) {
+      throw new Error('Nome da parte deve ter pelo menos 3 caracteres');
+    }
+    
+    const nomeFormatado = nomeParte.trim();
+    
+    // Estratégia: Busca por parte/requerente/requerido
+    try {
+      const resultadoParte = await makeRequestReal('/processos/consulta/parte', {
+        nome: nomeFormatado,
+        tribunais: tribunais.length > 0 ? tribunais.join(',') : undefined
+      });
+      
+      if (resultadoParte.success && resultadoParte.data) {
+        console.log('✅ Processos encontrados na busca por parte');
+        return {
+          success: true,
+          data: Array.isArray(resultadoParte.data) ? resultadoParte.data : [resultadoParte.data],
+          source: 'datajud-official',
+          isSimulated: false
+        };
+      }
+    } catch (error) {
+      console.warn('⚠️ Erro na busca por parte:', error.message);
+    }
+    
+    // Fallback: sem resultados
+    return {
+      success: true,
+      data: [],
+      message: `Nenhum processo encontrado para a parte "${nomeParte}"`,
+      source: 'datajud-official',
+      isSimulated: false
+    };
+    
+  } catch (error) {
+    console.error('❌ Erro na busca por parte:', error);
+    return {
+      success: false,
+      error: error.message,
+      data: [],
+      source: 'datajud-official'
+    };
+  }
+};
+
+// Função para buscar em todos os tribunais
+export const buscarEmTodosTribunais = async (criterio, valor) => {
+  try {
+    console.log('🔍 Buscando em TODOS os tribunais:', criterio, valor);
+    
+    // Obter todos os tribunais disponíveis
+    const todosTribunais = Object.keys(TRIBUNAIS);
+    
+    // Escolher função de busca baseada no critério
+    let funcaoBusca;
+    switch (criterio) {
+      case 'numero':
+        funcaoBusca = buscarProcessoPorNumero;
+        break;
+      case 'nome':
+        funcaoBusca = buscarProcessosPorNome;
+        break;
+      case 'advogado':
+        funcaoBusca = buscarProcessosPorAdvogado;
+        break;
+      case 'parte':
+        funcaoBusca = buscarProcessosPorParte;
+        break;
+      case 'texto':
+        funcaoBusca = buscarProcessoPorTexto;
+        break;
+      default:
+        funcaoBusca = buscarProcessoPorTexto;
+    }
+    
+    // Executar busca em todos os tribunais
+    const resultado = await funcaoBusca(valor, todosTribunais);
+    
+    return {
+      ...resultado,
+      searchScope: 'all-tribunals',
+      tribunaisConsultados: todosTribunais
+    };
+    
+  } catch (error) {
+    console.error('❌ Erro na busca em todos os tribunais:', error);
+    return {
+      success: false,
+      error: error.message,
+      data: [],
+      source: 'datajud-official'
+    };
+  }
+};
+
 // Função para obter movimentações detalhadas - DADOS REAIS DO CNJ
 export const obterMovimentacoesProcesso = async (numeroProcesso) => {
   try {
@@ -879,6 +1060,9 @@ export default {
   buscarProcessoPorNumero,
   buscarProcessosPorDocumento,
   buscarProcessosPorNome,
+  buscarProcessosPorAdvogado,
+  buscarProcessosPorParte,
+  buscarEmTodosTribunais,
   obterMovimentacoesProcesso,
   buscarProcessoAvancado,
   buscarProcessoPorTexto,
@@ -887,5 +1071,6 @@ export default {
   formatarNumeroProcesso,
   obterInfoTribunal,
   converterDadosDataJud,
+  obterTribunaisPorCategoria,
   TRIBUNAIS
 };
