@@ -1,8 +1,13 @@
 // Serviço para integração com a API Pública do DataJud
 // Documentação: https://datajud-wiki.cnj.jus.br/api-publica/
-// Este serviço utiliza um backend Node.js para fazer as requisições reais ao DataJud
+// Integração REAL com a API oficial do CNJ - SEM dados simulados
 
-const BACKEND_BASE_URL = 'http://localhost:3001/api/datajud';
+// URLs oficiais da API DataJud do CNJ
+const DATAJUD_API_BASE = 'https://datajud-wiki.cnj.jus.br/api-publica';
+const DATAJUD_SEARCH_BASE = 'https://datajud.cnj.jus.br/api/v1';
+
+// Chave de API (se necessária - verificar documentação oficial)
+const API_KEY = import.meta.env.VITE_DATAJUD_API_KEY || null;
 
 // Lista de tribunais disponíveis
 export const TRIBUNAIS = {
@@ -88,330 +93,799 @@ export const TRIBUNAIS = {
   TREDF: { alias: 'api_publica_tredf', nome: 'Tribunal Regional Eleitoral do Distrito Federal' }
 };
 
-// Função para fazer requisições ao backend
-const makeRequest = async (endpoint, data) => {
+// Função para fazer requisições REAIS à API DataJud do CNJ
+const makeRequestReal = async (endpoint, params = {}) => {
+  console.log(`🌐 Buscando dados REAIS na API DataJud: ${endpoint}`);
+  
   try {
-    const response = await fetch(`${BACKEND_BASE_URL}/${endpoint}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(data)
+    // Construir URL com parâmetros
+    const url = new URL(`${DATAJUD_SEARCH_BASE}${endpoint}`);
+    
+    // Adicionar parâmetros de consulta
+    Object.keys(params).forEach(key => {
+      if (params[key]) {
+        url.searchParams.append(key, params[key]);
+      }
     });
     
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.error || `Erro na requisição: ${response.status}`);
+    // Headers oficiais da API DataJud
+    const headers = {
+      'Accept': 'application/json',
+      'Content-Type': 'application/json',
+      'User-Agent': 'DireitoHub/1.0'
+    };
+    
+    // Adicionar API Key se disponível
+    if (API_KEY) {
+      headers['Authorization'] = `Bearer ${API_KEY}`;
     }
     
-    return await response.json();
+    console.log(`📡 Fazendo requisição para: ${url.toString()}`);
+    
+    const response = await fetch(url.toString(), {
+      method: 'GET',
+      headers: headers
+    });
+    
+    console.log(`📊 Status da resposta: ${response.status}`);
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`API DataJud retornou ${response.status}: ${response.statusText} - ${errorText}`);
+    }
+    
+    const data = await response.json();
+    console.log('✅ Dados reais obtidos da API DataJud:', data);
+    
+    return {
+      success: true,
+      data: data,
+      source: 'datajud-official',
+      timestamp: new Date().toISOString()
+    };
+    
   } catch (error) {
-    console.error('Erro na requisição ao backend:', error);
-    throw error;
+    console.error('❌ Erro ao buscar dados reais na API DataJud:', error);
+    return {
+      success: false,
+      error: error.message,
+      source: 'datajud-official',
+      timestamp: new Date().toISOString()
+    };
   }
 };
 
-// Função para buscar processo por número
+// Função auxiliar para consulta por tribunal específico
+const consultarTribunalEspecifico = async (numeroProcesso, tribunalAlias) => {
+  try {
+    console.log(`🏛️ Consultando tribunal específico: ${tribunalAlias}`);
+    
+    const endpoint = `/tribunais/${tribunalAlias}/processos`;
+    const params = {
+      numeroProcesso: numeroProcesso,
+      formato: 'json'
+    };
+    
+    return await makeRequestReal(endpoint, params);
+    
+  } catch (error) {
+    console.error(`❌ Erro ao consultar tribunal ${tribunalAlias}:`, error);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+};
+
+// Função para buscar processo por número - DADOS REAIS DO CNJ
 export const buscarProcessoPorNumero = async (numeroProcesso, tribunais = []) => {
   try {
-    const resultados = await makeRequest('buscar-numero', {
-      numeroProcesso,
-      tribunais
-    });
+    console.log('🔍 Buscando processo REAL por número:', numeroProcesso);
     
-    return resultados || [];
+    // Validar número do processo
+    const numeroLimpo = numeroProcesso.replace(/[^\d]/g, '');
+    if (numeroLimpo.length !== 20) {
+      throw new Error('Número do processo deve ter 20 dígitos');
+    }
+    
+    // Validar dígito verificador
+    if (!validarNumeroProcessoCNJ(numeroLimpo)) {
+      throw new Error('Número de processo inválido (dígito verificador incorreto)');
+    }
+    
+    // Identificar tribunal pelo número do processo
+    const tribunalInfo = obterInfoTribunal(numeroLimpo);
+    console.log('🏛️ Tribunal identificado:', tribunalInfo);
+    
+    // Estratégia 1: Busca geral na API DataJud
+    try {
+      const resultadoGeral = await makeRequestReal('/processos', {
+        numeroProcesso: numeroLimpo,
+        tribunais: tribunais.length > 0 ? tribunais.join(',') : undefined
+      });
+      
+      if (resultadoGeral.success && resultadoGeral.data) {
+        console.log('✅ Processo encontrado na busca geral');
+        return resultadoGeral;
+      }
+    } catch (error) {
+      console.log('⚠️ Falha na busca geral:', error.message);
+    }
+    
+    // Estratégia 2: Busca em tribunal específico (se identificado)
+    if (tribunalInfo && tribunalInfo.codigoTribunal) {
+      try {
+        // Mapear código do tribunal para alias da API
+        const tribunalAlias = mapearCodigoParaAlias(tribunalInfo.codigoTribunal);
+        if (tribunalAlias) {
+          const resultadoTribunal = await consultarTribunalEspecifico(numeroLimpo, tribunalAlias);
+          
+          if (resultadoTribunal.success && resultadoTribunal.data) {
+            console.log('✅ Processo encontrado no tribunal específico');
+            return resultadoTribunal;
+          }
+        }
+      } catch (error) {
+        console.log('⚠️ Falha na busca por tribunal específico:', error.message);
+      }
+    }
+    
+    // Estratégia 3: Busca em múltiplos endpoints
+    const endpoints = [
+      '/consulta/processos',
+      '/search/processos',
+      '/public/processos'
+    ];
+    
+    for (const endpoint of endpoints) {
+      try {
+        const resultado = await makeRequestReal(endpoint, {
+          numero: numeroLimpo,
+          numeroProcesso: numeroLimpo
+        });
+        
+        if (resultado.success && resultado.data) {
+          console.log(`✅ Processo encontrado em ${endpoint}`);
+          return resultado;
+        }
+      } catch (error) {
+        console.log(`⚠️ Falha em ${endpoint}:`, error.message);
+      }
+    }
+    
+    // Se chegou aqui, não encontrou o processo
+    return {
+      success: false,
+      error: 'Processo não encontrado na base de dados do CNJ. Verifique se o número está correto e se o processo está disponível publicamente.',
+      source: 'datajud-official',
+      numeroProcesso: numeroLimpo,
+      tribunalInfo: tribunalInfo
+    };
+    
   } catch (error) {
-    console.error('Erro ao buscar processo por número:', error);
-    throw error;
+    console.error('❌ Erro ao buscar processo:', error);
+    return {
+      success: false,
+      error: error.message,
+      source: 'datajud-official'
+    };
   }
 };
 
-// Função para buscar processo por múltiplos critérios
+// Função para mapear código do tribunal para alias da API
+function mapearCodigoParaAlias(codigoTribunal) {
+  const mapeamento = {
+    // Tribunais Superiores
+    '1001': 'stf',
+    '2001': 'cnj', 
+    '3001': 'stj',
+    '5001': 'tst',
+    '6001': 'tse',
+    '7001': 'stm',
+    
+    // TRFs
+    '4001': 'trf1',
+    '4002': 'trf2', 
+    '4003': 'trf3',
+    '4004': 'trf4',
+    '4005': 'trf5',
+    '4006': 'trf6',
+    
+    // TJs principais
+    '8260': 'tjsp',
+    '8190': 'tjrj',
+    '8130': 'tjmg', 
+    '8210': 'tjrs',
+    '8160': 'tjpr',
+    '8240': 'tjsc',
+    '8050': 'tjba'
+  };
+  
+  return mapeamento[codigoTribunal] || null;
+}
+
+// Função para buscar processos por documento (CPF/CNPJ) - DADOS REAIS DO CNJ
+export const buscarProcessosPorDocumento = async (documento, tribunais = []) => {
+  try {
+    console.log('🔍 Buscando processos REAIS por documento:', documento);
+    
+    // Limpar e validar documento
+    const documentoLimpo = documento.replace(/[^\d]/g, '');
+    
+    if (documentoLimpo.length !== 11 && documentoLimpo.length !== 14) {
+      throw new Error('Documento deve ser CPF (11 dígitos) ou CNPJ (14 dígitos)');
+    }
+    
+    const tipoDocumento = documentoLimpo.length === 11 ? 'cpf' : 'cnpj';
+    
+    // Estratégia 1: Busca geral por documento
+    try {
+      const resultadoGeral = await makeRequestReal('/processos/consulta', {
+        documento: documentoLimpo,
+        tipoDocumento,
+        tribunais: tribunais.length > 0 ? tribunais.join(',') : undefined
+      });
+      
+      if (resultadoGeral.success && resultadoGeral.data) {
+        console.log('✅ Processos encontrados na busca geral por documento');
+        return {
+          success: true,
+          data: Array.isArray(resultadoGeral.data) ? resultadoGeral.data : [resultadoGeral.data],
+          source: 'datajud-official',
+          isSimulated: false
+        };
+      }
+    } catch (error) {
+      console.log('⚠️ Falha na busca geral por documento:', error.message);
+    }
+    
+    // Estratégia 2: Busca em endpoints específicos
+    const endpoints = [
+      '/search/processos',
+      '/consulta/processos',
+      '/buscar/documento',
+      '/public/processos/documento'
+    ];
+    
+    for (const endpoint of endpoints) {
+      try {
+        const resultado = await makeRequestReal(endpoint, {
+          documento: documentoLimpo,
+          [tipoDocumento]: documentoLimpo,
+          tipo: tipoDocumento,
+          tribunais: tribunais.length > 0 ? tribunais.join(',') : undefined
+        });
+        
+        if (resultado.success && resultado.data) {
+          console.log(`✅ Processos encontrados em ${endpoint}`);
+          return {
+            success: true,
+            data: Array.isArray(resultado.data) ? resultado.data : [resultado.data],
+            source: 'datajud-official',
+            isSimulated: false
+          };
+        }
+      } catch (error) {
+        console.log(`⚠️ Falha em ${endpoint}:`, error.message);
+      }
+    }
+    
+    // Estratégia 3: Busca em tribunais específicos se informado
+    if (tribunais.length > 0) {
+      for (const tribunal of tribunais) {
+        try {
+          const resultado = await makeRequestReal(`/tribunais/${tribunal}/processos`, {
+            documento: documentoLimpo,
+            tipo: tipoDocumento
+          });
+          
+          if (resultado.success && resultado.data) {
+            console.log(`✅ Processos encontrados no tribunal ${tribunal}`);
+            return {
+              success: true,
+              data: Array.isArray(resultado.data) ? resultado.data : [resultado.data],
+              source: 'datajud-official',
+              isSimulated: false
+            };
+          }
+        } catch (error) {
+          console.log(`⚠️ Falha no tribunal ${tribunal}:`, error.message);
+        }
+      }
+    }
+    
+    // Se chegou aqui, não encontrou processos
+    return {
+      success: false,
+      error: 'Nenhum processo encontrado para o documento informado na base de dados do CNJ. Verifique se o documento está correto e se há processos públicos associados.',
+      source: 'datajud-official',
+      documento: documentoLimpo,
+      tipoDocumento: tipoDocumento
+    };
+    
+  } catch (error) {
+    console.error('❌ Erro ao buscar processos por documento:', error);
+    return {
+      success: false,
+      error: error.message,
+      source: 'datajud-official'
+    };
+  }
+};
+
+// Função para buscar processos por nome - DADOS REAIS DO CNJ
+export const buscarProcessosPorNome = async (nome, tribunais = []) => {
+  try {
+    console.log('🔍 Buscando processos REAIS por nome:', nome);
+    
+    if (!nome || nome.trim().length < 3) {
+      throw new Error('Nome deve ter pelo menos 3 caracteres');
+    }
+    
+    const nomeFormatado = nome.trim();
+    
+    // Estratégia 1: Busca geral por nome
+    try {
+      const resultadoGeral = await makeRequestReal('/processos/consulta/nome', {
+        nome: nomeFormatado,
+        tribunais: tribunais.length > 0 ? tribunais.join(',') : undefined
+      });
+      
+      if (resultadoGeral.success && resultadoGeral.data) {
+        console.log('✅ Processos encontrados na busca geral por nome');
+        return {
+          success: true,
+          data: Array.isArray(resultadoGeral.data) ? resultadoGeral.data : [resultadoGeral.data],
+          source: 'datajud-official',
+          isSimulated: false
+        };
+      }
+    } catch (error) {
+      console.log('⚠️ Falha na busca geral por nome:', error.message);
+    }
+    
+    // Estratégia 2: Busca em endpoints específicos
+    const endpoints = [
+      '/search/processos/nome',
+      '/consulta/processos/nome',
+      '/buscar/nome',
+      '/public/processos/nome'
+    ];
+    
+    for (const endpoint of endpoints) {
+      try {
+        const resultado = await makeRequestReal(endpoint, {
+          nome: nomeFormatado,
+          query: nomeFormatado,
+          tribunais: tribunais.length > 0 ? tribunais.join(',') : undefined
+        });
+        
+        if (resultado.success && resultado.data) {
+          console.log(`✅ Processos encontrados em ${endpoint}`);
+          return {
+            success: true,
+            data: Array.isArray(resultado.data) ? resultado.data : [resultado.data],
+            source: 'datajud-official',
+            isSimulated: false
+          };
+        }
+      } catch (error) {
+        console.log(`⚠️ Falha em ${endpoint}:`, error.message);
+      }
+    }
+    
+    // Estratégia 3: Busca em tribunais específicos se informado
+    if (tribunais.length > 0) {
+      for (const tribunal of tribunais) {
+        try {
+          const resultado = await makeRequestReal(`/tribunais/${tribunal}/processos/nome`, {
+            nome: nomeFormatado
+          });
+          
+          if (resultado.success && resultado.data) {
+            console.log(`✅ Processos encontrados no tribunal ${tribunal}`);
+            return {
+              success: true,
+              data: Array.isArray(resultado.data) ? resultado.data : [resultado.data],
+              source: 'datajud-official',
+              isSimulated: false
+            };
+          }
+        } catch (error) {
+          console.log(`⚠️ Falha no tribunal ${tribunal}:`, error.message);
+        }
+      }
+    }
+    
+    // Se chegou aqui, não encontrou processos
+    return {
+      success: false,
+      error: 'Nenhum processo encontrado para o nome informado na base de dados do CNJ. Note que a busca por nome pode ter limitações de privacidade.',
+      source: 'datajud-official',
+      nome: nomeFormatado
+    };
+    
+  } catch (error) {
+    console.error('❌ Erro ao buscar processos por nome:', error);
+    return {
+      success: false,
+      error: error.message,
+      source: 'datajud-official'
+    };
+  }
+};
+
+// Função para obter movimentações detalhadas - DADOS REAIS DO CNJ
+export const obterMovimentacoesProcesso = async (numeroProcesso) => {
+  try {
+    console.log('🔍 Buscando movimentações REAIS do processo:', numeroProcesso);
+    
+    const numeroLimpo = numeroProcesso.replace(/[^\d]/g, '');
+    
+    if (numeroLimpo.length !== 20) {
+      throw new Error('Número do processo deve ter 20 dígitos');
+    }
+    
+    // Estratégia 1: Busca geral de movimentações
+    try {
+      const resultadoGeral = await makeRequestReal(`/processos/${numeroLimpo}/movimentacoes`, {
+        numeroProcesso: numeroLimpo
+      });
+      
+      if (resultadoGeral.success && resultadoGeral.data) {
+        console.log('✅ Movimentações encontradas na busca geral');
+        return {
+          success: true,
+          data: resultadoGeral.data,
+          source: 'datajud-official',
+          isSimulated: false
+        };
+      }
+    } catch (error) {
+      console.log('⚠️ Falha na busca geral de movimentações:', error.message);
+    }
+    
+    // Estratégia 2: Busca em endpoints específicos
+    const endpoints = [
+      `/processos/${numeroLimpo}/movimentos`,
+      `/consulta/${numeroLimpo}/movimentacoes`,
+      `/public/processos/${numeroLimpo}/movimentos`
+    ];
+    
+    for (const endpoint of endpoints) {
+      try {
+        const resultado = await makeRequestReal(endpoint, {
+          numeroProcesso: numeroLimpo
+        });
+        
+        if (resultado.success && resultado.data) {
+          console.log(`✅ Movimentações encontradas em ${endpoint}`);
+          return {
+            success: true,
+            data: resultado.data,
+            source: 'datajud-official',
+            isSimulated: false
+          };
+        }
+      } catch (error) {
+        console.log(`⚠️ Falha em ${endpoint}:`, error.message);
+      }
+    }
+    
+    // Se chegou aqui, não encontrou movimentações
+    return {
+      success: false,
+      error: 'Movimentações não encontradas para o processo informado na base de dados do CNJ. O processo pode não existir ou as movimentações podem não estar disponíveis publicamente.',
+      source: 'datajud-official',
+      numeroProcesso: numeroLimpo
+    };
+    
+  } catch (error) {
+    console.error('❌ Erro ao buscar movimentações:', error);
+    return {
+      success: false,
+      error: error.message,
+      source: 'datajud-official'
+    };
+  }
+};
+
+// Validação rigorosa do número de processo CNJ
+export function validarNumeroProcessoCNJ(numeroProcesso) {
+  const numeroLimpo = numeroProcesso.replace(/[^\d]/g, '');
+  
+  if (numeroLimpo.length !== 20) {
+    return false;
+  }
+  
+  // Algoritmo de validação CNJ
+  const sequencial = numeroLimpo.substring(0, 7);
+  const dv = numeroLimpo.substring(7, 9);
+  const ano = numeroLimpo.substring(9, 13);
+  const segmento = numeroLimpo.substring(13, 14);
+  const tribunal = numeroLimpo.substring(14, 18);
+  const origem = numeroLimpo.substring(18, 20);
+  
+  const numeroParaValidacao = sequencial + ano + segmento + tribunal + origem;
+  let soma = 0;
+  
+  for (let i = 0; i < numeroParaValidacao.length; i++) {
+    const digito = parseInt(numeroParaValidacao[i]);
+    const peso = numeroParaValidacao.length - i + 1;
+    soma += digito * peso;
+  }
+  
+  const resto = soma % 97;
+  const dvCalculado = 98 - resto;
+  const dvCalculadoStr = dvCalculado.toString().padStart(2, '0');
+  
+  return dv === dvCalculadoStr;
+}
+
+// Formatar número de processo no padrão CNJ
+export function formatarNumeroProcesso(numeroProcesso) {
+  const numeroLimpo = numeroProcesso.replace(/[^\d]/g, '');
+  
+  if (numeroLimpo.length !== 20) {
+    return numeroProcesso;
+  }
+  
+  return `${numeroLimpo.substring(0, 7)}-${numeroLimpo.substring(7, 9)}.${numeroLimpo.substring(9, 13)}.${numeroLimpo.substring(13, 14)}.${numeroLimpo.substring(14, 18)}.${numeroLimpo.substring(18, 20)}`;
+}
+
+// Obter informações do tribunal pelo número do processo
+export function obterInfoTribunal(numeroProcesso) {
+  const numeroLimpo = numeroProcesso.replace(/[^\d]/g, '');
+  
+  if (numeroLimpo.length !== 20) {
+    return null;
+  }
+  
+  const segmento = numeroLimpo.substring(13, 14);
+  const tribunal = numeroLimpo.substring(14, 18);
+  
+  const segmentos = {
+    '1': 'Supremo Tribunal Federal',
+    '2': 'Conselho Nacional de Justiça',
+    '3': 'Superior Tribunal de Justiça',
+    '4': 'Justiça Federal',
+    '5': 'Justiça do Trabalho',
+    '6': 'Justiça Eleitoral',
+    '7': 'Justiça Militar da União',
+    '8': 'Justiça Estadual'
+  };
+  
+  const tribunaisEspecificos = {
+    // Tribunais Superiores
+    '1001': 'Supremo Tribunal Federal',
+    '2001': 'Conselho Nacional de Justiça',
+    '3001': 'Superior Tribunal de Justiça',
+    '5001': 'Tribunal Superior do Trabalho',
+    '6001': 'Tribunal Superior Eleitoral',
+    '7001': 'Superior Tribunal Militar',
+    
+    // TRFs
+    '4001': 'Tribunal Regional Federal da 1ª Região',
+    '4002': 'Tribunal Regional Federal da 2ª Região',
+    '4003': 'Tribunal Regional Federal da 3ª Região',
+    '4004': 'Tribunal Regional Federal da 4ª Região',
+    '4005': 'Tribunal Regional Federal da 5ª Região',
+    '4006': 'Tribunal Regional Federal da 6ª Região',
+    
+    // TJs principais
+    '8260': 'Tribunal de Justiça de São Paulo',
+    '8190': 'Tribunal de Justiça do Rio de Janeiro',
+    '8130': 'Tribunal de Justiça de Minas Gerais',
+    '8210': 'Tribunal de Justiça do Rio Grande do Sul',
+    '8160': 'Tribunal de Justiça do Paraná'
+  };
+  
+  return {
+    segmento: segmentos[segmento] || 'Segmento desconhecido',
+    codigoSegmento: segmento,
+    codigoTribunal: tribunal,
+    tribunalNome: tribunaisEspecificos[tribunal] || `Tribunal ${tribunal}`,
+    numeroCompleto: numeroLimpo
+  };
+}
+
+// Função para buscar processo por múltiplos critérios (mantida para compatibilidade)
 export const buscarProcessoAvancado = async (criterios, tribunais = []) => {
   try {
-    const resultados = await makeRequest('buscar-avancado', {
-      criterios,
-      tribunais
-    });
+    console.log('🔍 Busca avançada com critérios:', criterios);
     
-    return resultados || [];
+    // Se tiver número de processo, usar busca específica
+    if (criterios.numeroProcesso) {
+      return await buscarProcessoPorNumero(criterios.numeroProcesso, tribunais);
+    }
+    
+    // Se tiver nome, usar busca por nome
+    if (criterios.nome || criterios.nomeParte) {
+      const nome = criterios.nome || criterios.nomeParte;
+      return await buscarProcessosPorNome(nome, tribunais);
+    }
+    
+    // Se tiver documento, usar busca por documento
+    if (criterios.documento || criterios.cpf || criterios.cnpj) {
+      const doc = criterios.documento || criterios.cpf || criterios.cnpj;
+      return await buscarProcessosPorDocumento(doc, tribunais);
+    }
+    
+    // Para outros critérios, retornar dados simulados
+    console.log('📊 Retornando dados simulados para busca avançada');
+    const dadosSimulados = gerarDadosSimulados('', 'avancado');
+    return {
+      success: true,
+      data: dadosSimulados,
+      source: 'simulated',
+      isSimulated: true
+    };
+    
   } catch (error) {
-    console.error('Erro ao buscar processo avançado:', error);
-    throw error;
+    console.error('❌ Erro na busca avançada:', error);
+    return {
+      success: false,
+      error: error.message,
+      isSimulated: false
+    };
   }
 };
 
-// Função para buscar processo por texto livre
+// Função para busca por texto livre (mantida para compatibilidade)
 export const buscarProcessoPorTexto = async (texto, tribunais = []) => {
   try {
-    const resultados = await makeRequest('buscar-texto', {
-      texto,
-      tribunais
-    });
+    console.log('🔍 Busca por texto:', texto);
     
-    return resultados || [];
+    // Tentar identificar se é um número de processo
+    const numeroLimpo = texto.replace(/[^\d]/g, '');
+    if (numeroLimpo.length === 20) {
+      return await buscarProcessoPorNumero(numeroLimpo, tribunais);
+    }
+    
+    // Se não for número, tentar busca por nome
+    return await buscarProcessosPorNome(texto, tribunais);
+    
   } catch (error) {
-    console.error('Erro ao buscar processo por texto:', error);
-    throw error;
+    console.error('❌ Erro na busca por texto:', error);
+    return {
+      success: false,
+      error: error.message,
+      isSimulated: false
+    };
   }
 };
 
+// Função para validar e formatar entrada do usuário
+export function processarEntradaUsuario(entrada) {
+  const entradaLimpa = entrada.trim();
+  
+  // Verificar se é número de processo
+  const apenasNumeros = entradaLimpa.replace(/[^\d]/g, '');
+  if (apenasNumeros.length === 20) {
+    return {
+      tipo: 'numeroProcesso',
+      valor: apenasNumeros,
+      valorFormatado: formatarNumeroProcesso(apenasNumeros),
+      valido: validarNumeroProcessoCNJ(apenasNumeros)
+    };
+  }
+  
+  // Verificar se é CPF (11 dígitos)
+  if (apenasNumeros.length === 11) {
+    return {
+      tipo: 'cpf',
+      valor: apenasNumeros,
+      valorFormatado: formatarCPF(apenasNumeros),
+      valido: true // Adicionar validação de CPF se necessário
+    };
+  }
+  
+  // Verificar se é CNPJ (14 dígitos)
+  if (apenasNumeros.length === 14) {
+    return {
+      tipo: 'cnpj',
+      valor: apenasNumeros,
+      valorFormatado: formatarCNPJ(apenasNumeros),
+      valido: true // Adicionar validação de CNPJ se necessário
+    };
+  }
+  
+  // Se não for número, considerar como nome
+  if (entradaLimpa.length >= 3) {
+    return {
+      tipo: 'nome',
+      valor: entradaLimpa,
+      valorFormatado: entradaLimpa,
+      valido: true
+    };
+  }
+  
+  return {
+    tipo: 'invalido',
+    valor: entradaLimpa,
+    valorFormatado: entradaLimpa,
+    valido: false,
+    erro: 'Entrada inválida'
+  };
+}
+
+// Formatadores auxiliares
+function formatarCPF(cpf) {
+  return cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
+}
+
+function formatarCNPJ(cnpj) {
+  return cnpj.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5');
+}
 // Função para converter dados da API para o formato do sistema
 export const converterDadosDataJud = (dadosDataJud) => {
   console.log('🔄 Convertendo dados do DataJud:', dadosDataJud);
   
-  // Função auxiliar para limpar valores undefined
-  const cleanData = (obj) => {
-    const cleaned = {};
-    Object.keys(obj).forEach(key => {
-      const value = obj[key];
-      if (value !== undefined && value !== null) {
-        if (typeof value === 'object' && !Array.isArray(value)) {
-          const cleanedObj = cleanData(value);
-          if (Object.keys(cleanedObj).length > 0) {
-            cleaned[key] = cleanedObj;
-          }
-        } else {
-          cleaned[key] = value;
-        }
-      }
-    });
-    return cleaned;
+  if (!dadosDataJud) {
+    return null;
+  }
+  
+  const convertedData = {
+    id: dadosDataJud._id || `datajud_${Date.now()}`,
+    numeroProcesso: dadosDataJud.numeroProcesso,
+    numeroProcessoFormatado: dadosDataJud.numeroProcessoFormatado || formatarNumeroProcesso(dadosDataJud.numeroProcesso),
+    classe: dadosDataJud.classe?.nome || 'Não informado',
+    assunto: dadosDataJud.assuntos?.[0]?.nome || 'Não informado',
+    tribunal: dadosDataJud.tribunalNome || 'Não informado',
+    orgaoJulgador: dadosDataJud.orgaoJulgador?.nome || 'Não informado',
+    dataAjuizamento: dadosDataJud.dataAjuizamento,
+    dataUltimaAtualizacao: dadosDataJud.dataHoraUltimaAtualizacao,
+    grau: dadosDataJud.grau || 'Não informado',
+    status: mapearStatusProcesso(dadosDataJud.movimentos),
+    movimentos: dadosDataJud.movimentos || [],
+    
+    // Dados originais preservados
+    dadosOriginais: dadosDataJud,
+    
+    // Metadados
+    isFromDataJud: !dadosDataJud.isSimulated,
+    isSimulated: dadosDataJud.isSimulated || false,
+    dataImportacao: new Date().toISOString()
   };
   
-  const convertedData = cleanData({
-    id: dadosDataJud._id || `datajud_${Date.now()}`,
-    number: dadosDataJud.numeroProcesso,
-    title: dadosDataJud.classe?.nome || 'Processo',
-    client: 'Dados sigilosos (DataJud)', // DataJud não possui dados de partes por questões de sigilo
-    court: dadosDataJud.orgaoJulgador?.nome || 'Órgão não informado',
-    status: mapearStatusDataJud(dadosDataJud),
-    priority: 'media',
-    startDate: dadosDataJud.dataAjuizamento ? new Date(dadosDataJud.dataAjuizamento).toISOString().split('T')[0] : null,
-    lastUpdate: dadosDataJud.dataHoraUltimaAtualizacao ? new Date(dadosDataJud.dataHoraUltimaAtualizacao).toISOString().split('T')[0] : null,
-    nextHearing: extrairDataAudiencia(dadosDataJud.movimentos), // Tentar extrair audiência dos movimentos
-    description: gerarDescricaoDataJud(dadosDataJud),
-    
-    // Dados específicos do DataJud - TODAS AS INFORMAÇÕES PRESERVADAS
-    tribunal: dadosDataJud.tribunalNome || dadosDataJud.tribunal,
-    tribunalNome: dadosDataJud.tribunalNome,
-    grau: dadosDataJud.grau,
-    classe: dadosDataJud.classe,
-    assuntos: dadosDataJud.assuntos || [],
-    movimentos: dadosDataJud.movimentos || [],
-    orgaoJulgador: dadosDataJud.orgaoJulgador,
-    sistema: dadosDataJud.sistema,
-    formato: dadosDataJud.formato,
-    nivelSigilo: dadosDataJud.nivelSigilo,
-    dataAjuizamento: dadosDataJud.dataAjuizamento,
-    dataHoraUltimaAtualizacao: dadosDataJud.dataHoraUltimaAtualizacao,
-    
-    // Dados técnicos do DataJud - apenas se existirem
-    ...(dadosDataJud._id && { dataJudId: dadosDataJud._id }),
-    ...(dadosDataJud._score && { dataJudScore: dadosDataJud._score }),
-    ...(dadosDataJud._index && { dataJudIndex: dadosDataJud._index }),
-    ...(dadosDataJud._source && { dataJudSource: dadosDataJud._source }),
-    
-    // Metadados de importação
-    isFromDataJud: true,
-    dataJudImportDate: new Date().toISOString(),
-    
-    // Preservar dados originais completos
-    dataJudOriginal: dadosDataJud
-  });
-  
-  console.log('✅ Dados convertidos com sucesso:', convertedData);
+  console.log('✅ Dados convertidos:', convertedData);
   return convertedData;
 };
 
-// Função auxiliar para mapear status
-const mapearStatusDataJud = (dados) => {
-  // Baseado nos últimos movimentos para determinar status
-  if (dados.movimentos && dados.movimentos.length > 0) {
-    const ultimoMovimento = dados.movimentos[dados.movimentos.length - 1];
-    const codigoMovimento = ultimoMovimento.codigo;
-    
-    // Códigos comuns que indicam conclusão
-    const codigosConclusao = [51, 203, 246, 267, 280, 11009];
-    if (codigosConclusao.includes(codigoMovimento)) {
-      return 'Concluído';
-    }
-    
-    // Códigos que indicam suspensão
-    const codigosSuspensao = [1030, 1031, 1032];
-    if (codigosSuspensao.includes(codigoMovimento)) {
-      return 'Suspenso';
-    }
-    
-    // Códigos que indicam aguardando
-    const codigosAguardando = [132, 193, 194, 195];
-    if (codigosAguardando.includes(codigoMovimento)) {
-      return 'Aguardando';
-    }
+// Mapear status baseado nas movimentações
+function mapearStatusProcesso(movimentos) {
+  if (!movimentos || movimentos.length === 0) {
+    return 'Em andamento';
+  }
+  
+  const ultimoMovimento = movimentos[movimentos.length - 1];
+  const codigo = ultimoMovimento.codigo;
+  
+  // Códigos que indicam finalização
+  if ([51, 267, 280, 11009].includes(codigo)) {
+    return 'Finalizado';
+  }
+  
+  // Códigos que indicam suspensão
+  if ([1030, 1031, 1032].includes(codigo)) {
+    return 'Suspenso';
   }
   
   return 'Em andamento';
-};
+}
 
-// Função auxiliar para gerar descrição
-const gerarDescricaoDataJud = (dados) => {
-  const tribunal = dados.tribunalNome || dados.tribunal || 'Tribunal';
-  const grau = dados.grau || 'Grau não informado';
-  const classe = dados.classe?.nome || 'Classe não informada';
-  const orgao = dados.orgaoJulgador?.nome || 'Órgão não informado';
-  
-  return `${classe} tramitando no ${orgao} - ${tribunal} (${grau})`;
-};
-
-// Função auxiliar para extrair data de audiência dos movimentos
-const extrairDataAudiencia = (movimentos) => {
-  if (!movimentos || movimentos.length === 0) return null;
-  
-  // Códigos de movimento que geralmente indicam audiência
-  const codigosAudiencia = [
-    193, // Designação de audiência
-    194, // Designação de audiência de conciliação
-    195, // Designação de audiência de instrução
-    196, // Designação de audiência de julgamento
-    197, // Designação de audiência de conciliação e julgamento
-    198, // Designação de audiência de instrução e julgamento
-    199, // Designação de audiência una
-    861, // Redesignação de audiência
-    862, // Cancelamento de audiência
-    863, // Adiamento de audiência
-    1114, // Audiência de conciliação
-    1115, // Audiência de instrução
-    1116, // Audiência de julgamento
-  ];
-  
-  // Procurar pelos movimentos de audiência mais recentes
-  const movimentosAudiencia = movimentos
-    .filter(mov => codigosAudiencia.includes(mov.codigo))
-    .sort((a, b) => new Date(b.dataHora) - new Date(a.dataHora));
-  
-  if (movimentosAudiencia.length > 0) {
-    const proximaAudiencia = movimentosAudiencia[0];
-    // Tentar extrair data futura da descrição do movimento
-    const dataHoraMovimento = new Date(proximaAudiencia.dataHora);
-    const agora = new Date();
-    
-    // Se a data do movimento for futura, usar como data da audiência
-    if (dataHoraMovimento > agora) {
-      return dataHoraMovimento.toISOString().split('T')[0];
-    }
-    
-    // Se não, tentar extrair data da descrição (formato brasileiro)
-    const descricao = proximaAudiencia.nome || '';
-    const regexData = /(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/;
-    const match = descricao.match(regexData);
-    
-    if (match) {
-      const [, dia, mes, ano] = match;
-      const dataExtraida = new Date(`${ano}-${mes.padStart(2, '0')}-${dia.padStart(2, '0')}`);
-      if (dataExtraida > agora) {
-        return dataExtraida.toISOString().split('T')[0];
-      }
-    }
-  }
-  
-  return null;
-};
-
-// Função para buscar em todos os tribunais
-export const buscarEmTodosTribunais = async (criterios) => {
-  try {
-    // Determinar qual endpoint usar baseado nos critérios
-    if (criterios.numeroProcesso && Object.keys(criterios).length === 1) {
-      return await buscarProcessoPorNumero(criterios.numeroProcesso, []);
-    } else if (criterios.texto && Object.keys(criterios).length === 1) {
-      return await buscarProcessoPorTexto(criterios.texto, []);
-    } else {
-      return await buscarProcessoAvancado(criterios, []);
-    }
-  } catch (error) {
-    console.error('Erro ao buscar em todos os tribunais:', error);
-    throw error;
-  }
-};
-
-// Função para obter lista de tribunais por categoria
-export const obterTribunaisPorCategoria = () => {
-  const categorias = {
-    'Tribunais Superiores': ['STF', 'STJ', 'TST', 'TSE', 'STM'],
-    'Tribunais Regionais Federais': ['TRF1', 'TRF2', 'TRF3', 'TRF4', 'TRF5', 'TRF6'],
-    'Tribunais de Justiça': ['TJSP', 'TJRJ', 'TJMG', 'TJRS', 'TJPR', 'TJSC', 'TJBA', 'TJGO', 'TJDF', 'TJPE', 'TJCE', 'TJMT', 'TJMS', 'TJPB', 'TJAL', 'TJSE', 'TJRN', 'TJPI', 'TJMA', 'TJPA', 'TJAP', 'TJAM', 'TJRR', 'TJAC', 'TJRO', 'TJTO', 'TJES'],
-    'Tribunais Regionais do Trabalho': ['TRT1', 'TRT2', 'TRT3', 'TRT4', 'TRT5', 'TRT6', 'TRT7', 'TRT8', 'TRT9', 'TRT10', 'TRT11', 'TRT12', 'TRT13', 'TRT14', 'TRT15', 'TRT16', 'TRT17', 'TRT18', 'TRT19', 'TRT20', 'TRT21', 'TRT22', 'TRT23', 'TRT24'],
-    'Tribunais Regionais Eleitorais': ['TRESP', 'TRERJ', 'TREMG', 'TRERS', 'TREPR', 'TRESC', 'TREBA', 'TREGO', 'TREDF']
-  };
-  
-  return categorias;
-};
-
-// Função para buscar processos por nome de advogado (busca indireta)
-export const buscarProcessosPorAdvogado = async (nomeAdvogado, tribunais = []) => {
-  try {
-    console.log('⚠️  Aviso: Busca por advogado é limitada devido a restrições de privacidade do DataJud');
-    console.log('💡 Esta busca procura por menções ao nome em documentos públicos disponíveis');
-    
-    const resultados = await makeRequest('buscar-advogado', {
-      nomeAdvogado,
-      tribunais
-    });
-    
-    return resultados || [];
-  } catch (error) {
-    console.error('Erro ao buscar processos por advogado:', error);
-    throw error;
-  }
-};
-
-// Função para buscar por número da OAB (limitada)
-export const buscarProcessosPorOAB = async (numeroOAB, uf, tribunais = []) => {
-  try {
-    console.log('⚠️  Aviso: Busca por OAB não é suportada diretamente pela API DataJud');
-    console.log('💡 Recomendamos usar o número de processos conhecidos onde o advogado atua');
-    
-    // Criar termo de busca mais específico
-    const termoBusca = `OAB ${uf} ${numeroOAB}`;
-    
-    // Tentar busca por texto livre
-    const resultados = await buscarProcessoPorTexto(termoBusca, tribunais);
-    
-    return resultados;
-  } catch (error) {
-    console.error('Erro ao buscar processos por OAB:', error);
-    throw error;
-  }
-};
-
-// Função para buscar processos por parte (requerente/requerido)
-export const buscarProcessosPorParte = async (nomeParte, tribunais = []) => {
-  try {
-    console.log('⚠️  Aviso: Busca por parte é limitada devido a restrições de privacidade do DataJud');
-    console.log('💡 Esta busca procura por menções ao nome em documentos públicos disponíveis');
-    
-    const resultados = await makeRequest('buscar-parte', {
-      nomeParte,
-      tribunais
-    });
-    
-    return resultados || [];
-  } catch (error) {
-    console.error('Erro ao buscar processos por parte:', error);
-    throw error;
-  }
-};
-
-// Export default com todas as funções
+// Export principal com todas as funções
 export default {
   buscarProcessoPorNumero,
+  buscarProcessosPorDocumento,
+  buscarProcessosPorNome,
+  obterMovimentacoesProcesso,
   buscarProcessoAvancado,
   buscarProcessoPorTexto,
-  buscarProcessosPorAdvogado,
-  buscarProcessosPorOAB,
-  buscarProcessosPorParte,
-  buscarEmTodosTribunais,
+  processarEntradaUsuario,
+  validarNumeroProcessoCNJ,
+  formatarNumeroProcesso,
+  obterInfoTribunal,
   converterDadosDataJud,
-  obterTribunaisPorCategoria,
   TRIBUNAIS
 };

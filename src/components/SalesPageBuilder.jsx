@@ -43,8 +43,12 @@ const SalesPageBuilder = ({ onBack, onPageCreated, onPageUpdated, editingPage = 
   useEffect(() => {
     async function fetchCourses() {
       if (user?.uid) {
+        console.log('[SalesPageBuilder] user.uid:', user.uid);
         const result = await courseService.getPublishedCoursesByUser(user.uid);
+        console.log('[SalesPageBuilder] Cursos publicados retornados:', result);
         if (result.success) setAvailableProducts(result.data);
+      } else {
+        console.log('[SalesPageBuilder] Usuário não logado ou user.uid indefinido');
       }
     }
     fetchCourses();
