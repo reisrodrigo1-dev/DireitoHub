@@ -794,7 +794,7 @@ INSTRUÇÕES:
       body: JSON.stringify({
         model: MODEL,
         messages: messages,
-        max_tokens: 3000, // Reduzido para deixar mais espaço para o input
+        max_tokens: 3000, // Respostas mais completas mantendo compatibilidade
         temperature: 0.3, // Reduzido para respostas mais consistentes
         top_p: 0.9,
         frequency_penalty: 0.1,

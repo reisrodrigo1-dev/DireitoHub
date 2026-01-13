@@ -1473,20 +1473,6 @@ ${isReplicaWorkflow ?
           </div>
         )}
         
-        {/* Log de debug para verificar renderização */}
-        {process.env.NODE_ENV === 'development' && (
-          <div className="bg-red-100 border border-red-300 rounded p-2 mb-4 text-xs">
-            <p><strong>Debug Renderização:</strong></p>
-            <p>Mensagens para renderizar: {messages.length}</p>
-            <p>Array de mensagens: {JSON.stringify(messages.map(m => ({id: m.id, role: m.role, content: m.content.substring(0, 50)})))}</p>
-            <p>Condição renderização: {messages.length > 0 ? 'VERDADEIRA' : 'FALSA'}</p>
-            <p>isInitialized: {isInitialized ? 'Sim' : 'Não'}</p>
-            <p>isLoading: {isLoading ? 'Sim' : 'Não'}</p>
-            <p>currentChatId: {currentChatId || 'N/A'}</p>
-            <p>existingChat: {existingChat ? `ID: ${existingChat.id}` : 'N/A'}</p>
-          </div>
-        )}
-        
         {/* Renderização das mensagens */}
         {messages.length > 0 && messages.map((message) => (
           <div
@@ -1668,7 +1654,7 @@ ${isReplicaWorkflow ?
             onChange={(e) => setCurrentMessage(e.target.value)}
             onKeyPress={handleKeyPress}
             disabled={isLoading || conversationPhase === 'completed'}
-            className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50"
+            className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50 text-gray-900"
             placeholder={
               conversationPhase === 'ready' 
                 ? 'Digite GERAR para gerar o resultado...' 

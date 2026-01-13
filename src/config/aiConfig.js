@@ -4,9 +4,9 @@ export const AI_CONFIG = {
   API_URL: 'https://api.openai.com/v1/chat/completions',
   MODEL: 'gpt-3.5-turbo',
   MAX_TOKENS: {
-    ANALYSIS: 1000,
-    PROMPT_PROCESSING: 4000,
-    REGULAR_CHAT: 4000
+    ANALYSIS: 2000,
+    PROMPT_PROCESSING: 3000,
+    REGULAR_CHAT: 3000
   },
   TEMPERATURE: {
     ANALYSIS: 0.5,

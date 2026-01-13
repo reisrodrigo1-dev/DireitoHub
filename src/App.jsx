@@ -20,6 +20,7 @@ import SalesPageBuilder from './components/SalesPageBuilder';
 import SalesPageAlunoLogin from './components/SalesPageAlunoLogin';
 import SalesPageAlunoDashboard from './components/SalesPageAlunoDashboard';
 import AlunoDashboard from './components/AlunoDashboard';
+import PitchDeck from './components/PitchDeck';
 
 // Componente para proteger rotas de dashboard
 const DashboardRoute = ({ userType }) => {
@@ -72,6 +73,9 @@ function App() {
       <AlunoAuthProvider>
         <Router>
           <Routes>
+            {/* Pitch Deck */}
+            <Route path="/pitch-deck" element={<PitchDeck />} />
+            
             {/* Tela home original */}
             <Route path="/" element={<HomePage />} />
             
