@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { lawyerPageService } from '../firebase/firestore';
 
@@ -55,6 +55,7 @@ const LawyerPageBuilder = ({ onBack, onPageCreated, onPageUpdated, editingPage =
     oab: '',
     telefone: '',
     email: user?.email || '',
+    slug: '', // Slug único da página
     endereco: {
       rua: '',
       numero: '',
@@ -101,6 +102,8 @@ const LawyerPageBuilder = ({ onBack, onPageCreated, onPageUpdated, editingPage =
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoadingCep, setIsLoadingCep] = useState(false);
   const [currentStep, setCurrentStep] = useState(1);
+  const [slugStatus, setSlugStatus] = useState(''); // 'available', 'taken', 'invalid', ''
+  const [isCheckingSlug, setIsCheckingSlug] = useState(false);
 
   const handleInputChange = (field, value) => {
     if (field.includes('.')) {
@@ -204,6 +207,60 @@ const LawyerPageBuilder = ({ onBack, onPageCreated, onPageUpdated, editingPage =
     }
   };
 
+  // Função para gerar slug automaticamente a partir do nome
+  const generateSlug = (name) => {
+    if (!name) return '';
+    return name
+      .toLowerCase()
+      .trim()
+      .replace(/\s+/g, '-') // Substituir espaços por hífen
+      .replace(/[^a-z0-9-]/g, '') // Remover caracteres especiais
+      .replace(/-+/g, '-') // Remover hífens múltiplos
+      .replace(/^-|-$/g, ''); // Remover hífens das extremidades
+  };
+
+  // Função para verificar disponibilidade do slug
+  const checkSlugAvailability = async (slug, excludePageId = null) => {
+    if (!slug || slug.length < 3) {
+      setSlugStatus('invalid');
+      return false;
+    }
+
+    try {
+      setIsCheckingSlug(true);
+      const isAvailable = await lawyerPageService.isSlugAvailable(slug, excludePageId || (isEditing ? editingPage.id : null));
+      
+      if (isAvailable) {
+        setSlugStatus('available');
+        return true;
+      } else {
+        setSlugStatus('taken');
+        return false;
+      }
+    } catch (error) {
+      console.error('Erro ao verificar slug:', error);
+      setSlugStatus('');
+      return false;
+    } finally {
+      setIsCheckingSlug(false);
+    }
+  };
+
+  // Efeito para atualizar slug automaticamente quando o nome muda
+  useEffect(() => {
+    const nameField = formData.tipoPagina === 'escritorio' ? formData.nomeEscritorio : formData.nomeAdvogado;
+    const newSlug = generateSlug(nameField);
+    
+    if (newSlug && newSlug !== formData.slug) {
+      setFormData(prev => ({ ...prev, slug: newSlug }));
+      if (newSlug.length >= 3) {
+        checkSlugAvailability(newSlug);
+      } else {
+        setSlugStatus('invalid');
+      }
+    }
+  }, [formData.nomeAdvogado, formData.nomeEscritorio, formData.tipoPagina]);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     
@@ -256,18 +313,31 @@ const LawyerPageBuilder = ({ onBack, onPageCreated, onPageUpdated, editingPage =
         }
       } else {
         // Criar nova página
-        // Gerar slug único
-        const baseSlug =
-          formData.tipoPagina === 'escritorio'
-            ? formData.nomeEscritorio.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')
-            : formData.nomeAdvogado.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
-        let slug = baseSlug;
-        let counter = 1;
+        // Usar slug customizado do usuário se disponível, caso contrário gerar um novo
+        let slug = formData.slug;
         
-        // Verificar se slug está disponível
-        while (!(await lawyerPageService.isSlugAvailable(slug))) {
-          slug = `${baseSlug}-${counter}`;
-          counter++;
+        // Se o slug foi customizado, validar se está disponível
+        if (slug && slug.length >= 3) {
+          const isAvailable = await lawyerPageService.isSlugAvailable(slug);
+          if (!isAvailable) {
+            alert('O slug escolhido não está disponível. Por favor, choose outro.');
+            setIsSubmitting(false);
+            return;
+          }
+        } else {
+          // Gerar slug único automático
+          const baseSlug =
+            formData.tipoPagina === 'escritorio'
+              ? formData.nomeEscritorio.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')
+              : formData.nomeAdvogado.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+          slug = baseSlug;
+          let counter = 1;
+          
+          // Verificar se slug está disponível
+          while (!(await lawyerPageService.isSlugAvailable(slug))) {
+            slug = `${baseSlug}-${counter}`;
+            counter++;
+          }
         }
 
         const pageData = {
@@ -658,6 +728,73 @@ const LawyerPageBuilder = ({ onBack, onPageCreated, onPageUpdated, editingPage =
               className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
           </div>
+        </div>
+      </div>
+
+      {/* Campo de Slug */}
+      <div className="border-t pt-6">
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          URL da Página (Slug)
+        </label>
+        <div className="space-y-2">
+          <div className="flex items-center space-x-2">
+            <span className="text-sm text-gray-600 bg-gray-100 px-3 py-2 rounded-lg font-medium">
+              seusite.com/
+            </span>
+            <input
+              type="text"
+              value={formData.slug}
+              onChange={(e) => {
+                const newSlug = generateSlug(e.target.value);
+                setFormData(prev => ({ ...prev, slug: newSlug }));
+                if (newSlug.length >= 3) {
+                  checkSlugAvailability(newSlug);
+                } else {
+                  setSlugStatus('invalid');
+                }
+              }}
+              className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-sm"
+              placeholder="nome-da-pagina"
+            />
+          </div>
+
+          {/* Status do Slug */}
+          <div className="flex items-center space-x-2">
+            {isCheckingSlug && (
+              <>
+                <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                <span className="text-sm text-blue-600">Verificando disponibilidade...</span>
+              </>
+            )}
+            {!isCheckingSlug && slugStatus === 'available' && (
+              <>
+                <svg className="w-4 h-4 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                </svg>
+                <span className="text-sm text-green-600">Slug disponível ✓</span>
+              </>
+            )}
+            {!isCheckingSlug && slugStatus === 'taken' && (
+              <>
+                <svg className="w-4 h-4 text-red-500" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                </svg>
+                <span className="text-sm text-red-600">Slug já está em uso</span>
+              </>
+            )}
+            {!isCheckingSlug && slugStatus === 'invalid' && formData.slug && (
+              <>
+                <svg className="w-4 h-4 text-yellow-500" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                </svg>
+                <span className="text-sm text-yellow-600">Slug deve ter pelo menos 3 caracteres</span>
+              </>
+            )}
+          </div>
+
+          <p className="text-xs text-gray-500 mt-2">
+            O slug é gerado automaticamente a partir do seu nome e pode ser customizado. Ele deve ser único no sistema.
+          </p>
         </div>
       </div>
     </div>

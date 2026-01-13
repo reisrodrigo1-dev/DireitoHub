@@ -35,13 +35,20 @@ const userService = {
   // Obter usuário por ID
   async getUser(userId) {
     try {
-      const docSnap = await getDoc(doc(db, 'users', userId));
+      const userDocRef = doc(db, 'users', userId);
+      const docSnap = await getDoc(userDocRef);
       if (docSnap.exists()) {
         return { success: true, data: docSnap.data() };
       }
+      // Usuário não existe, retornar como não encontrado (não é erro)
       return { success: false, error: 'Usuário não encontrado' };
     } catch (error) {
-      console.warn('Erro ao buscar usuário no Firestore:', error);
+      // Se for erro de permissão, é esperado para usuários novos
+      if (error.code === 'permission-denied') {
+        console.warn('⚠️ Usuário ainda não possui documento no Firestore');
+        return { success: false, error: 'Usuário não configurado' };
+      }
+      console.warn('Erro ao buscar usuário no Firestore:', error.message);
       return { success: false, error: 'Erro de conexão com o banco de dados' };
     }
   },
@@ -1488,12 +1495,18 @@ const appointmentService = {
   // Obter agendamentos por cliente
   async getAppointmentsByClient(clientId) {
     try {
+      console.log('🔍 Buscando agendamentos do cliente:', clientId);
       const q = query(
         collection(db, 'appointments'),
         where('clientUserId', '==', clientId)
       );
       
       const querySnapshot = await getDocs(q);
+      console.log('📊 Agendamentos encontrados:', querySnapshot.size);
+      querySnapshot.docs.forEach(doc => {
+        console.log('  - ID:', doc.id, 'clientUserId:', doc.data().clientUserId);
+      });
+      
       const appointments = querySnapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data(),
@@ -1549,6 +1562,48 @@ const appointmentService = {
     } catch (error) {
       console.error('Erro ao buscar agendamentos do advogado:', error);
       return { success: false, error: error.message };
+    }
+  },
+
+  // Obter agendamentos públicos do advogado (sem autenticação)
+  async getPublicAppointmentsByLawyer(lawyerId) {
+    try {
+      // Buscar agendamentos onde o advogado é o dono OU foi atribuído
+      // Sem filtros de privacidade - deixar firestore.rules decidir
+      const q1 = query(
+        collection(db, 'appointments'),
+        where('lawyerUserId', '==', lawyerId)
+      );
+      const q2 = query(
+        collection(db, 'appointments'),
+        where('assignedLawyerId', '==', lawyerId)
+      );
+
+      const [snap1, snap2] = await Promise.all([getDocs(q1), getDocs(q2)]);
+      const appointments = [
+        ...snap1.docs,
+        ...snap2.docs
+      ].reduce((acc, doc) => {
+        // Evitar duplicatas
+        if (!acc.some(a => a.id === doc.id)) {
+          acc.push({
+            id: doc.id,
+            ...doc.data(),
+            createdAt: doc.data().createdAt?.toDate?.() || new Date(),
+            updatedAt: doc.data().updatedAt?.toDate?.() || new Date(),
+            appointmentDate: doc.data().appointmentDate?.toDate?.() || new Date(doc.data().appointmentDate)
+          });
+        }
+        return acc;
+      }, []);
+
+      // Sort by createdAt in JavaScript instead of Firestore
+      appointments.sort((a, b) => b.createdAt - a.createdAt);
+      return { success: true, data: appointments };
+    } catch (error) {
+      console.warn('Aviso ao buscar agendamentos públicos do advogado:', error.message);
+      // Retornar array vazio em vez de erro para permitir página carregar
+      return { success: true, data: [] };
     }
   },
 
@@ -1714,6 +1769,57 @@ const appointmentService = {
   // Alias para compatibilidade com componentes existentes
   async getLawyerAppointments(lawyerId) {
     return await this.getAppointmentsByLawyer(lawyerId);
+  },
+
+  // Adicionar mensagem ao chat do agendamento
+  async addAppointmentMessage(appointmentId, messageData) {
+    try {
+      const messagesRef = collection(db, 'appointments', appointmentId, 'messages');
+      const newMessageRef = doc(messagesRef);
+      
+      await setDoc(newMessageRef, {
+        ...messageData,
+        timestamp: serverTimestamp(),
+        createdAt: serverTimestamp()
+      });
+      
+      return { success: true, id: newMessageRef.id };
+    } catch (error) {
+      console.error('Erro ao adicionar mensagem:', error);
+      return { success: false, error: error.message };
+    }
+  },
+
+  // Obter mensagens do agendamento
+  async getAppointmentMessages(appointmentId) {
+    try {
+      const messagesRef = collection(db, 'appointments', appointmentId, 'messages');
+      const q = query(messagesRef, orderBy('timestamp', 'asc'));
+      
+      const querySnapshot = await getDocs(q);
+      const messages = querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        timestamp: doc.data().timestamp?.toDate?.() || new Date(),
+        createdAt: doc.data().createdAt?.toDate?.() || new Date()
+      }));
+      
+      return { success: true, data: messages };
+    } catch (error) {
+      console.error('Erro ao buscar mensagens:', error);
+      return { success: false, error: error.message, data: [] };
+    }
+  },
+
+  // Deletar mensagem
+  async deleteAppointmentMessage(appointmentId, messageId) {
+    try {
+      await deleteDoc(doc(db, 'appointments', appointmentId, 'messages', messageId));
+      return { success: true };
+    } catch (error) {
+      console.error('Erro ao deletar mensagem:', error);
+      return { success: false, error: error.message };
+    }
   }
 };
 

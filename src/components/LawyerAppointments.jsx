@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { appointmentService, clientService, lawyerPageService } from '../firebase/firestore';
 import ClientCodeDisplay from './ClientCodeDisplay';
+import AppointmentChat from './AppointmentChat';
 import { 
   criarEventoConsulta, 
   generateGoogleCalendarLink, 
@@ -1078,6 +1079,18 @@ const LawyerAppointments = () => {
             </div>
             
             <div className="p-6 space-y-6">
+              {/* Chat de Mensagens */}
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-3">Comunicação</h3>
+                <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 overflow-hidden">
+                  <AppointmentChat 
+                    appointmentId={selectedAppointment.id}
+                    lawyerName={userData?.name || 'Advogado'}
+                    clientName={selectedAppointment.clientName}
+                  />
+                </div>
+              </div>
+
               {/* Informações do Cliente */}
               <div>
                 <h3 className="text-lg font-semibold text-gray-900 mb-3">Informações do Cliente</h3>

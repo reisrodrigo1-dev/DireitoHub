@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { appointmentService } from '../firebase/firestore';
 import PaymentModal from './PaymentModal';
+import AppointmentChat from './AppointmentChat';
 
 const ClientAppointments = () => {
   const { user, userData } = useAuth();
@@ -378,7 +379,7 @@ END:VCALENDAR`;
                           <svg className="w-5 h-5 mr-3 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9v-9m0-9v9" />
                           </svg>
-                          <div>
+                          <div className="flex-1">
                             <p className="font-medium">Página de Origem</p>
                             <p className="text-sm">
                               {appointment.paginaOrigem.nomePagina} 
@@ -387,9 +388,22 @@ END:VCALENDAR`;
                               </span>
                             </p>
                             {appointment.paginaOrigem.slug && (
-                              <p className="text-xs text-gray-500 mt-1">
-                                /{appointment.paginaOrigem.slug}
-                              </p>
+                              <div className="flex items-center gap-2 mt-2">
+                                <p className="text-xs text-gray-500">
+                                  /{appointment.paginaOrigem.slug}
+                                </p>
+                                <a
+                                  href={`/advogado/${appointment.paginaOrigem.slug}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-xs text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1"
+                                >
+                                  Acessar
+                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                  </svg>
+                                </a>
+                              </div>
                             )}
                           </div>
                         </div>
@@ -402,6 +416,18 @@ END:VCALENDAR`;
                       <div className="bg-gray-50 p-4 rounded-lg">
                         <p className="text-sm text-gray-700">{appointment.caseDescription}</p>
                       </div>
+                    </div>
+                  </div>
+
+                  {/* Chat de Mensagens */}
+                  <div className="mt-6 pt-6 border-t border-gray-200">
+                    <h4 className="font-medium text-gray-900 mb-3">Comunicação</h4>
+                    <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 overflow-hidden">
+                      <AppointmentChat 
+                        appointmentId={appointment.id}
+                        lawyerName={appointment.lawyerName}
+                        clientName={userData?.name || 'Você'}
+                      />
                     </div>
                   </div>
 

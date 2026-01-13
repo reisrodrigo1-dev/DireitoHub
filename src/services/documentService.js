@@ -1,6 +1,13 @@
 // Serviço para leitura e processamento de documentos
 import mammoth from 'mammoth';
+import * as pdfjsLib from 'pdfjs-dist';
 import { requiresMandatoryDocument, canBenefitFromDocument, getDocumentRequestMessage } from './promptDocumentConfig.js';
+
+// Configurar o worker do PDF.js
+if (typeof window !== 'undefined') {
+  // Use a versão que está na pasta public
+  pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
+}
 
 // Verificar se estamos no browser ou Node.js
 const isBrowser = typeof window !== 'undefined';
@@ -27,35 +34,76 @@ const readWordFile = async (file) => {
   }
 };
 
-// Função para ler PDFs no browser (implementação simplificada temporária)
+// Função para ler PDFs com extração real de texto
 const readPDFFile = async (file) => {
   console.log('🔍 Processando PDF:', file.name);
   
-  // Implementação temporária simplificada
-  // TODO: Implementar extração real de PDF quando resolver problemas com PDF.js
-  
-  const fileName = file.name;
-  const fileSize = Math.round(file.size / 1024);
-  
-  return `📕 DOCUMENTO PDF CARREGADO: ${fileName}
+  try {
+    // Verificar se pdfjsLib está disponível
+    if (!pdfjsLib || !pdfjsLib.getDocument) {
+      console.warn('⚠️ PDF.js não disponível, tentando fallback');
+      throw new Error('Biblioteca PDF.js não está disponível');
+    }
+    
+    const arrayBuffer = await file.arrayBuffer();
+    console.log('📖 ArrayBuffer criado, iniciando parseamento do PDF');
+    
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    console.log('📑 PDF carregado com', pdf.numPages, 'páginas');
+    
+    let extractedText = '';
+    
+    // Extrair texto de todas as páginas
+    for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+      try {
+        const page = await pdf.getPage(pageNum);
+        const textContent = await page.getTextContent();
+        const pageText = textContent.items.map(item => item.str).join(' ');
+        console.log(`📄 Página ${pageNum}: ${pageText.length} caracteres`);
+        extractedText += pageText + '\n';
+      } catch (pageError) {
+        console.warn(`⚠️ Erro ao processar página ${pageNum}:`, pageError);
+      }
+    }
+    
+    if (!extractedText || extractedText.trim().length === 0) {
+      console.error('❌ Nenhum texto foi extraído do PDF');
+      throw new Error('Nenhum texto foi extraído do PDF. O arquivo pode estar vazio ou ser uma imagem.');
+    }
+    
+    console.log('✅ PDF processado com sucesso:', {
+      fileName: file.name,
+      páginas: pdf.numPages,
+      caracteres: extractedText.length,
+      preview: extractedText.substring(0, 100)
+    });
+    
+    return extractedText;
+  } catch (error) {
+    console.error('❌ Erro ao processar PDF:', error);
+    
+    // Fallback: Retornar mensagem orientando converter para outro formato
+    const fileName = file.name;
+    return `⚠️ AVISO: O PDF "${fileName}" não pôde ser processado automaticamente.
 
-📊 INFORMAÇÕES DO ARQUIVO:
-• Nome: ${fileName}
-• Tamanho: ${fileSize}KB
-• Tipo: PDF
+📋 COMO RESOLVER:
+1. Abra o PDF em seu computador
+2. Selecione todo o texto (Ctrl+A)
+3. Copie o texto (Ctrl+C)
+4. Crie um arquivo .txt
+5. Cole o conteúdo (Ctrl+V)
+6. Salve o arquivo
+7. Anexe o arquivo .txt aqui
 
-⚠️ AVISO TEMPORÁRIO:
-Este PDF foi carregado com sucesso, mas a extração automática de texto está temporariamente limitada.
+Ou:
+1. Use uma ferramenta online gratuita para converter PDF → TXT
+2. Anexe o arquivo .txt resultante
 
-🔧 PARA MELHOR RESULTADO:
-1. Converta o PDF para formato .txt ou .docx
-2. Ou copie e cole o conteúdo principal do PDF em um arquivo .txt
-3. Isso garantirá que todo o conteúdo seja processado corretamente pela IA
+ALTERNATIVA:
+- Você pode colar o conteúdo do PDF diretamente na mensagem de chat
 
-📝 CONTEÚDO PARA A RÉPLICA:
-Por favor, descreva brevemente o conteúdo deste PDF ou forneça o texto principal em formato adicional.
-
-✅ O arquivo foi aceito e o fluxo da Réplica pode continuar.`;
+🔄 O sistema está pronto para processar o texto quando enviado!`;
+  }
 };
 
 // Função principal para processar qualquer tipo de documento
@@ -87,7 +135,13 @@ export const processDocument = async (file) => {
         throw new Error('Arquivos .doc não são suportados. Converta para .docx ou .txt');
       
       case 'pdf':
+        console.log('📂 Iniciando leitura de PDF...');
         content = await readPDFFile(file);
+        console.log('✅ Conteúdo do PDF retornado:', {
+          length: content.length,
+          firstChars: content.substring(0, 100),
+          isWarning: content.includes('AVISO')
+        });
         break;
       
       default:
@@ -105,7 +159,7 @@ export const processDocument = async (file) => {
       content = content.substring(0, maxContentLength) + '\n\n[DOCUMENTO TRUNCADO - MUITO LONGO]';
     }
 
-    return {
+    const result = {
       success: true,
       fileName: file.name,
       fileSize: file.size,
@@ -113,6 +167,16 @@ export const processDocument = async (file) => {
       content: content.trim(),
       wordCount: content.trim().split(/\s+/).length
     };
+    
+    console.log('📊 Resultado de processDocument:', {
+      success: result.success,
+      fileName: result.fileName,
+      wordCount: result.wordCount,
+      contentLength: result.content.length,
+      contentPreview: result.content.substring(0, 100)
+    });
+    
+    return result;
 
   } catch (error) {
     console.error('Erro ao processar documento:', error);

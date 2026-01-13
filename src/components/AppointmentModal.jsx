@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { appointmentService, userService, collaborationService } from '../firebase/firestore';
+import InlineAuthForm from './InlineAuthForm';
 
 const AppointmentModal = ({ isOpen, onClose, lawyerData, selectedDate, selectedTime }) => {
   // Para páginas do tipo escritório, buscar advogados colaboradores
@@ -8,6 +9,7 @@ const AppointmentModal = ({ isOpen, onClose, lawyerData, selectedDate, selectedT
   const [selectedLawyerId, setSelectedLawyerId] = useState('');
   const { user, userData, isAuthenticated } = useAuth();
   const [showLoginMessage, setShowLoginMessage] = useState(false);
+  const [showAuthForm, setShowAuthForm] = useState(false);
   const [caseDescription, setCaseDescription] = useState('');
   const [whatsappNumber, setWhatsappNumber] = useState('');
   const [acceptedPrice, setAcceptedPrice] = useState(false);
@@ -164,8 +166,10 @@ const AppointmentModal = ({ isOpen, onClose, lawyerData, selectedDate, selectedT
         assignedLawyerName
       };
 
+      console.log('📝 Criando agendamento com dados:', appointmentData);
       const result = await appointmentService.createAppointment(appointmentData);
       if (result.success) {
+        console.log('✅ Agendamento criado com sucesso! ID:', result.id);
         setStep(4);
       } else {
         alert('Erro ao criar agendamento: ' + result.error);
@@ -190,7 +194,13 @@ const AppointmentModal = ({ isOpen, onClose, lawyerData, selectedDate, selectedT
 
   // Função para ir para login
   const handleGoToLogin = () => {
-    window.location.href = '/login';
+    setShowAuthForm(true);
+  };
+
+  const handleAuthSuccess = () => {
+    // Auth bem sucedida, fechar form e recarregar para atualizar contexto
+    setShowAuthForm(false);
+    window.location.reload();
   };
 
   // Formatação de valores
@@ -288,7 +298,46 @@ const AppointmentModal = ({ isOpen, onClose, lawyerData, selectedDate, selectedT
           {/* Step 1: Login Check */}
           {step === 1 && (
             <div className="text-center">
-              {showLoginMessage ? (
+              {showAuthForm ? (
+                <InlineAuthForm 
+                  onAuthSuccess={handleAuthSuccess}
+                  onClose={() => setShowAuthForm(false)}
+                />
+              ) : isClient ? (
+                <div className="space-y-4">
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                    <div className="flex items-center justify-center mb-3">
+                      <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </div>
+                    <h3 className="text-lg font-semibold text-green-800 mb-1">Bem-vindo!</h3>
+                    <p className="text-green-700 mb-3">
+                      ✓ Você está logado como <strong>{userData?.name || userData?.email}</strong>
+                    </p>
+                    <div className="space-y-3">
+                      <button
+                        onClick={handleLoginCheck}
+                        className="w-full bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                      >
+                        Continuar com Agendamento
+                      </button>
+                      <a
+                        href="/dashboard-cliente"
+                        className="w-full block bg-gray-200 text-gray-800 px-6 py-3 rounded-lg hover:bg-gray-300 transition-colors font-medium"
+                      >
+                        Ir para Dashboard
+                      </a>
+                      <button
+                        onClick={handleClose}
+                        className="w-full bg-gray-100 text-gray-700 px-6 py-3 rounded-lg hover:bg-gray-200 transition-colors"
+                      >
+                        Cancelar
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : showLoginMessage ? (
                 <div className="space-y-4">
                   <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
                     <div className="flex items-center justify-center mb-3">
@@ -305,7 +354,7 @@ const AppointmentModal = ({ isOpen, onClose, lawyerData, selectedDate, selectedT
                         onClick={handleGoToLogin}
                         className="w-full bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors font-medium"
                       >
-                        Ir para Login
+                        Fazer Login / Criar Conta
                       </button>
                       <button
                         onClick={handleClose}

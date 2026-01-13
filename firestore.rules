@@ -1,0 +1,151 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ============================================
+    // PÁGINAS DE ADVOGADO - Acesso Público
+    // ============================================
+    match /lawyerPages/{pageId} {
+      allow read: if true;
+      allow create: if request.auth != null;
+      allow update, delete: if request.auth != null && 
+                             request.auth.uid == resource.data.userId;
+    }
+
+    // ============================================
+    // USUÁRIOS - Acesso Privado
+    // ============================================
+    match /users/{userId} {
+      allow read, create: if request.auth != null && request.auth.uid == userId;
+      allow update, delete: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // ============================================
+    // CLIENTES - Acesso Privado
+    // ============================================
+    match /clients/{clientId} {
+      allow read, write: if request.auth != null && 
+                         request.auth.uid == resource.data.userId;
+    }
+
+    // ============================================
+    // PROCESSOS/CASOS - Acesso Privado
+    // ============================================
+    match /processes/{caseId} {
+      allow read, write: if request.auth != null && 
+                         request.auth.uid == resource.data.userId;
+    }
+
+    match /cases/{caseId} {
+      allow read, write: if request.auth != null && 
+                         request.auth.uid == resource.data.userId;
+    }
+
+    // ============================================
+    // AGENDAMENTOS - Acesso Privado para Advogado
+    // ============================================
+    match /appointments/{appointmentId} {
+      // Permitir queries por lawyerUserId e assignedLawyerId
+      allow list: if request.auth != null;
+      
+      // Leitura: Advogado (privado), clientes (privado)
+      allow read: if request.auth != null && 
+                   (request.auth.uid == resource.data.lawyerId ||
+                    request.auth.uid == resource.data.lawyerUserId ||
+                    request.auth.uid == resource.data.assignedLawyerId ||
+                    request.auth.uid == resource.data.clientUserId);
+      
+      // Leitura pública: agendamentos públicos, ou aqueles com status 'available'
+      allow read: if resource.data.isPublic == true;
+      allow read: if resource.data.status == 'available' || 
+                   resource.data.status == 'available_public' ||
+                   resource.data.status == 'pendente' ||
+                   resource.data.status == 'confirmado';
+      
+      allow create: if true;
+      
+      allow update, delete: if request.auth != null && 
+                            (request.auth.uid == resource.data.lawyerId ||
+                             request.auth.uid == resource.data.lawyerUserId ||
+                             request.auth.uid == resource.data.assignedLawyerId ||
+                             request.auth.uid == resource.data.clientUserId);
+
+      // Subcoleção de mensagens do chat
+      match /messages/{messageId} {
+        allow read: if request.auth != null && 
+                     (request.auth.uid == get(/databases/$(database)/documents/appointments/$(appointmentId)).data.lawyerId ||
+                      request.auth.uid == get(/databases/$(database)/documents/appointments/$(appointmentId)).data.lawyerUserId ||
+                      request.auth.uid == get(/databases/$(database)/documents/appointments/$(appointmentId)).data.assignedLawyerId ||
+                      request.auth.uid == get(/databases/$(database)/documents/appointments/$(appointmentId)).data.clientUserId);
+        allow create: if request.auth != null && 
+                      (request.auth.uid == get(/databases/$(database)/documents/appointments/$(appointmentId)).data.lawyerId ||
+                       request.auth.uid == get(/databases/$(database)/documents/appointments/$(appointmentId)).data.lawyerUserId ||
+                       request.auth.uid == get(/databases/$(database)/documents/appointments/$(appointmentId)).data.assignedLawyerId ||
+                       request.auth.uid == get(/databases/$(database)/documents/appointments/$(appointmentId)).data.clientUserId);
+        allow delete: if request.auth != null && request.auth.uid == resource.data.senderUserId;
+      }
+    }
+
+    // ============================================
+    // CHATS - Acesso Privado
+    // ============================================
+    match /chats/{chatId} {
+      allow read, write: if request.auth != null && 
+                         (request.auth.uid == resource.data.userId ||
+                          request.auth.uid == resource.data.assistantId);
+    }
+
+    // ============================================
+    // DOCUMENTOS - Acesso Privado
+    // ============================================
+    match /documents/{documentId} {
+      allow read, write: if request.auth != null && 
+                         request.auth.uid == resource.data.userId;
+    }
+
+    // ============================================
+    // PAGAMENTOS - Acesso Privado
+    // ============================================
+    match /payments/{paymentId} {
+      allow read, write: if request.auth != null && 
+                         (request.auth.uid == resource.data.userId ||
+                          request.auth.uid == resource.data.lawyerId);
+    }
+
+    // ============================================
+    // EVENTOS - Acesso Privado
+    // ============================================
+    match /events/{eventId} {
+      allow read, write: if request.auth != null && 
+                         request.auth.uid == resource.data.userId;
+    }
+
+    // ============================================
+    // COLABORAÇÕES - Acesso Privado
+    // ============================================
+    match /collaborations/{collaborationId} {
+      allow read, write: if request.auth != null && 
+                         (request.auth.uid == resource.data.ownerUserId ||
+                          request.auth.uid == resource.data.collaboratorUserId);
+    }
+
+    // ============================================
+    // CONVITES - Acesso Privado
+    // ============================================
+    match /invites/{inviteId} {
+      allow read, write: if request.auth != null && 
+                         (request.auth.uid == resource.data.senderUserId ||
+                          request.auth.uid == resource.data.recipientUserId);
+    }
+
+    // ============================================
+    // COLLABORATION INVITES - Acesso Privado
+    // ============================================
+    match /collaboration_invites/{inviteId} {
+      allow read, write: if request.auth != null && 
+                         (request.auth.uid == resource.data.senderUserId ||
+                          request.auth.email == resource.data.recipientEmail);
+    }
+  }
+}
+

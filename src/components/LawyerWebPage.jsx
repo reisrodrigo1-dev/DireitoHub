@@ -24,7 +24,7 @@ const LawyerWebPage = ({ lawyerData, isPreview = false }) => {
   const loadOccupiedSlots = async () => {
     try {
       setLoadingSlots(true);
-      const result = await appointmentService.getAppointmentsByLawyer(lawyerData.userId);
+      const result = await appointmentService.getPublicAppointmentsByLawyer(lawyerData.userId);
       
       if (result.success) {
         // Filtrar apenas agendamentos pendentes e pagos (que devem bloquear horários)

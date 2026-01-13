@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { sendMessageToAI, generateFirstQuestion, generateNextQuestion, generateFinalResult, validateUserInput } from '../services/openaiService';
 import { generateSimpleFinalResult } from '../services/simpleFallbackService';
-import { loadPromptContent } from '../services/promptService';
+import { loadPromptContent, getWelcomeMessage } from '../services/promptService';
 import { chatStorageService } from '../services/chatStorageService';
 import { useAuth } from '../contexts/AuthContext';
 import { promptRequiresDocument, promptCanBenefitFromDocument, generateDocumentRequestMessage, generateInitialDocumentMessage } from '../services/documentService';
@@ -191,9 +191,10 @@ const ChatInterface = ({ promptType, onBack, onClose, existingChat = null, onBac
             conversationPhase: existingChat.conversationPhase
           });
 
-          // Normalizar mensagens para garantir que timestamps sejam válidos
-          const normalizedMessages = (existingChat.messages || []).map(msg => ({
+          // Normalizar mensagens para garantir que timestamps sejam válidos e tenham id
+          const normalizedMessages = (existingChat.messages || []).map((msg, index) => ({
             ...msg,
+            id: msg.id || Date.now() + index, // Garantir que tenha id
             timestamp: normalizeTimestamp(msg.timestamp)
           }));
 
@@ -253,13 +254,19 @@ const ChatInterface = ({ promptType, onBack, onClose, existingChat = null, onBac
 
         // Novo chat - carregar conteúdo do arquivo de prompt
         const content = await loadPromptContent(promptType.id);
+        console.log('📄 Prompt carregado:', {
+          promptId: promptType.id,
+          loaded: !!content,
+          length: content?.length || 0,
+          preview: content?.substring(0, 150) || 'VAZIO'
+        });
         setPromptContent(content);
 
         // Verificar se é um fluxo de Réplica
         const isReplica = shouldUseReplicaWorkflow(promptType);
         setIsReplicaWorkflow(isReplica);
 
-        let welcomeMessage;
+        let welcomeMessage = null;
 
         if (isReplica) {
           // Inicializar fluxo específico da Réplica
@@ -285,7 +292,7 @@ const ChatInterface = ({ promptType, onBack, onClose, existingChat = null, onBac
               timestamp: new Date()
             };
 
-            setMessages([welcomeMessage]);
+            // NÃO chamar setMessages aqui - vai ser feito no Firestore
             setDocumentRequired(true);
             setShowDocumentUpload(true);
           } catch (replicaError) {
@@ -299,62 +306,25 @@ const ChatInterface = ({ promptType, onBack, onClose, existingChat = null, onBac
               content: `❌ Erro ao inicializar fluxo da Réplica: ${replicaError.message}\n\nUsando fluxo padrão.`,
               timestamp: new Date()
             };
-            setMessages([welcomeMessage]);
+            // NÃO chamar setMessages aqui - vai ser feito no Firestore
           }
         } else {
-          // Gerar primeira pergunta baseada no prompt (fluxo normal)
-          const firstQuestion = await generateFirstQuestion(promptType, content);
-        
-          if (firstQuestion.success) {
-            welcomeMessage = {
-              id: 1,
-              role: 'assistant',
-              content: firstQuestion.message,
-              timestamp: new Date()
-            };
-          } else {
-            // Fallback caso a primeira pergunta falhe - criar mensagem completa e organizada
-            const requiresDoc = promptRequiresDocument(promptType);
-            const canBenefit = promptCanBenefitFromDocument(promptType);
-            
-            let fullMessage = `# 🤖 ${promptType.name}
-
-Olá! Sou seu assistente jurídico especializado em **${promptType.name}**.
-
-## 📋 Sobre este Assistente
-${promptType.description}
-
-## 🎯 Como Funciona
-Vou coletar informações necessárias através de perguntas direcionadas para gerar o melhor resultado possível para seu caso.`;
-
-            // Adicionar seção de documentos se necessário
-            if (requiresDoc) {
-              fullMessage += `\n\n## 📄 **DOCUMENTO OBRIGATÓRIO**
-${generateInitialDocumentMessage(promptType)}
-
-⚠️ **Importante:** Este assistente precisa de um documento para funcionar corretamente. Por favor, prepare o documento antes de prosseguir.`;
-            } else if (canBenefit) {
-              fullMessage += `\n\n## 📎 **Documentos Opcionais**
-💡 **Dica:** Este assistente funciona melhor com documentos de apoio. 
-
-Se você tiver documentos relacionados ao caso (petições, decisões, contratos, etc.), pode anexá-los para uma análise mais detalhada e precisa.`;
-            }
-
-            fullMessage += `\n\n## 🚀 Vamos Começar!
-Para iniciar, me conte sobre o contexto do seu caso e o que você precisa que eu faça especificamente com relação a **${promptType.name}**.
-
----
-*Assistente powered by BIPETech*`;
-
-            welcomeMessage = {
-              id: 1,
-              role: 'assistant',
-              content: fullMessage,
-              timestamp: new Date()
-            };
-          }
-
-          setMessages([welcomeMessage]);
+          // Para prompts simples, iniciar chat com mensagem de boas-vindas
+          console.log('💬 Iniciando chat com mensagem de boas-vindas para prompt simples');
+          
+          const welcomeText = getWelcomeMessage(promptType.name);
+          console.log('📬 Mensagem de boas-vindas gerada:', welcomeText.substring(0, 80));
+          
+          welcomeMessage = {
+            id: Date.now(),
+            role: 'assistant',
+            content: welcomeText,
+            timestamp: new Date(),
+            isWelcome: true
+          };
+          
+          console.log('📮 Criada mensagem inicial (sem definir no state ainda):', welcomeMessage);
+          // NÃO chamar setMessages aqui - vai ser feito depois no Firestore
         }
 
         // Configurar estado de upload de documentos (sem criar mensagens adicionais)
@@ -374,16 +344,28 @@ Para iniciar, me conte sobre o contexto do seu caso e o que você precisa que eu
             if (createResult.success) {
               setCurrentChatId(createResult.id);
               setChatTitle(newChatTitle);
-              setMessages([welcomeMessage]);
               
-              // Salvar primeira mensagem no Firestore
+              // Determinar que mensagens salvar baseado no fluxo
+              let messagesToSave = [];
+              if (welcomeMessage) {
+                messagesToSave = [welcomeMessage];
+              }
+              
+              console.log('💾 Salvando chat com mensagens:', messagesToSave.length);
+              
+              // ÚNICA CHAMADA A setMessages - AQUI
+              setMessages(messagesToSave);
+              console.log('✅ setMessages chamado com:', messagesToSave.length, 'mensagens');
+              
+              // Salvar no Firestore
               await chatStorageService.saveProgress(
                 createResult.id,
-                [welcomeMessage],
+                messagesToSave,
                 [],
                 'questioning',
                 []
               );
+              
               console.log('Chat criado com sucesso no Firestore:', createResult.id);
               
               // Notificar componente pai sobre criação do chat
@@ -395,20 +377,30 @@ Para iniciar, me conte sobre o contexto do seu caso e o que você precisa que eu
               console.warn('Erro ao criar chat no Firestore, continuando em modo offline:', createResult.error);
               setCurrentChatId('offline-' + Date.now());
               setChatTitle(`${promptType.name} - ${new Date().toLocaleDateString()}`);
-              setMessages([welcomeMessage]);
+              
+              // Manter as mensagens já definidas
+              if (welcomeMessage) {
+                setMessages([welcomeMessage]);
+              }
             }
           } catch (error) {
             console.warn('Erro ao criar chat no Firestore, continuando em modo offline:', error);
             setCurrentChatId('offline-' + Date.now());
             setChatTitle(`${promptType.name} - ${new Date().toLocaleDateString()}`);
-            setMessages([welcomeMessage]);
+            
+            // Manter as mensagens já definidas
+            if (welcomeMessage) {
+              setMessages([welcomeMessage]);
+            }
           }
         } else {
           // Usuário não autenticado - modo offline
           console.log('Usuário não autenticado, iniciando chat em modo offline');
           setCurrentChatId('offline-' + Date.now());
           setChatTitle(`${promptType.name} - ${new Date().toLocaleDateString()}`);
-          setMessages([welcomeMessage]);
+          if (welcomeMessage) {
+            setMessages([welcomeMessage]);
+          }
         }
       } catch (error) {
         console.error('Erro ao inicializar chat:', error);
@@ -471,13 +463,11 @@ Para iniciar, me conte sobre o contexto do seu caso e o que você precisa que eu
               attachedDocuments
             );
             
-            // Notificar componente pai sobre criação do chat
-            if (onChatCreated) {
-              onChatCreated(createResult.id);
-            }
+            console.log('Chat offline migrado com sucesso para Firestore:', createResult.id);
+            // Nota: Não chamar onChatCreated aqui porque é uma migração, não uma criação
           }
         } catch (error) {
-        console.error('Erro ao migrar chat offline:', error);
+          console.error('Erro ao migrar chat offline:', error);
         }
       }
     };
@@ -717,14 +707,13 @@ Para iniciar, me conte sobre o contexto do seu caso e o que você precisa que eu
           
           console.log('📝 Gerando prompt da seção...');
           const sectionPrompt = replicaWorkflowService.generateSectionPrompt(sectionIndex);
-          console.log('� Prompt da seção gerado:', {
+          console.log('📝 Prompt da seção gerado:', {
             length: sectionPrompt.length,
             preview: sectionPrompt.substring(0, 200) + '...'
           });
           
           try {
             console.log('🤖 Chamando IA para gerar seção...');
-            // Formatar prompt como mensagem para a IA
             const aiMessages = [
               {
                 role: 'user',
@@ -737,7 +726,6 @@ Para iniciar, me conte sobre o contexto do seu caso e o que você precisa que eu
               documentsIncluded: attachedDocuments.length
             });
             
-            // Usar o serviço OpenAI para gerar a seção
             const aiResponse = await sendMessageToAI(aiMessages);
             
             console.log('🤖 Resposta da IA recebida:', {
@@ -748,7 +736,6 @@ Para iniciar, me conte sobre o contexto do seu caso e o que você precisa que eu
             });
             
             if (aiResponse && aiResponse.success && aiResponse.message) {
-              // Validar conteúdo da seção
               const validation = replicaWorkflowService.validateSectionContent(
                 aiResponse.message, 
                 sectionIndex
@@ -756,13 +743,11 @@ Para iniciar, me conte sobre o contexto do seu caso e o que você precisa que eu
               
               let responseMessage = aiResponse.message;
               
-              // Adicionar avisos se houver
               if (validation.warnings && validation.warnings.length > 0) {
                 responseMessage += '\n\n⚠️ **Avisos:**\n' + 
                   validation.warnings.map(w => `• ${w}`).join('\n');
               }
               
-              // Avançar para próxima seção
               const nextStep = replicaWorkflowService.advanceToNextSection();
               setReplicaState(replicaWorkflowService.getCurrentState());
               
@@ -889,94 +874,156 @@ Para iniciar, me conte sobre o contexto do seu caso e o que você precisa que eu
         console.log('🔍 DEBUG - Estado da conversa:', {
           conversationPhase,
           userContent: userMessage.content,
-          userContentUpper: userMessage.content.toUpperCase(),
-          isGerar: userMessage.content.toUpperCase() === 'GERAR',
-          collectedDataLength: collectedData.length
+          promptType: promptType?.id,
+          isSimpleChat: !isReplicaWorkflow && conversationPhase === 'questioning'
         });
         
-        // PRIORIDADE MÁXIMA: Se o usuário digitou "GERAR", sempre gerar resultado
-        if (userMessage.content.toUpperCase() === 'GERAR') {
-          console.log('🎯 DETECTADO COMANDO GERAR - Gerando resultado com IA');
-        
-        // Tentar usar a IA real primeiro
-        try {
-          console.log('� Tentando gerar resultado com OpenAI...');
-          response = await generateFinalResult(promptType, promptContent, collectedData, messages, attachedDocuments);
+        // Para prompts simples como "Corrigir o Português", usar chat direto
+        if (!isReplicaWorkflow && conversationPhase === 'questioning') {
+          console.log('💬 Usando chat direto para prompt simples');
+          console.log('📋 Conteúdo do prompt:', {
+            loaded: !!promptContent,
+            length: promptContent?.length || 0,
+            firstChars: promptContent?.substring(0, 100) || 'SEM CONTEÚDO'
+          });
           
-          if (response.success && response.message) {
-            console.log('✅ Resultado gerado com IA com sucesso!');
-            setConversationPhase('completed');
-          } else {
-            throw new Error('Resposta da IA inválida');
-          }
-        } catch (error) {
-          console.warn('⚠️ Erro ao usar IA, usando fallback:', error.message);
-          
-          // Usar fallback se a IA falhar
-          response = await generateSimpleFinalResult(promptType, collectedData);
-          setConversationPhase('completed');          }
-        } else if (conversationPhase === 'questioning') {
-          // Validar resposta do usuário
-          const validation = await validateUserInput(userMessage.content, promptContent);
-          
-          if (validation.isValid) {
-            // Adicionar dado coletado
-            const newCollectedData = [...collectedData, {
-              question: messages[messages.length - 1]?.content || '',
-              answer: userMessage.content,
-              timestamp: new Date()
-            }];
-            setCollectedData(newCollectedData);
+          try {
+            // Preparar mensagens para a IA incluindo o prompt do sistema
+            let systemContent = promptContent || 'Você é um assistente útil.';
             
-            // Gerar próxima pergunta incluindo contexto dos documentos
-            response = await generateNextQuestion(promptType, promptContent, newCollectedData, messages, attachedDocuments);
+            // Se há documentos anexados, incluir conteúdo deles no contexto
+            if (attachedDocuments.length > 0) {
+              console.log('📎 Incluindo conteúdo dos documentos no contexto');
+              console.log('📋 Documentos anexados:', attachedDocuments.map(d => ({
+                fileName: d.fileName,
+                contentLength: d.content?.length || 0,
+                firstChars: d.content?.substring(0, 50) || 'SEM CONTEÚDO'
+              })));
+              
+              const documentContext = attachedDocuments
+                .map((doc, index) => {
+                  console.log(`🔍 Processando documento ${index + 1}: ${doc.fileName}`);
+                  return `**DOCUMENTO ${index + 1}: ${doc.fileName}**\n${doc.content}`;
+                })
+                .join('\n\n---\n\n');
+              
+              systemContent += `\n\n## DOCUMENTOS FORNECIDOS:\n\n${documentContext}`;
+              
+              console.log('✅ Documentos adicionados ao systemContent:', {
+                systemContentLength: systemContent.length,
+                documentContextLength: documentContext.length
+              });
+            }
+            
+            const aiMessages = [
+              {
+                role: 'system',
+                content: systemContent
+              },
+              ...messages.map(msg => ({
+                role: msg.role,
+                content: msg.content
+              })),
+              {
+                role: 'user',
+                content: userMessage.content
+              }
+            ];
+            
+            console.log('📤 aiMessages preparadas:', {
+              systemPromptLength: systemContent.length,
+              totalMessages: aiMessages.length,
+              hasDocuments: attachedDocuments.length > 0,
+              documentsCount: attachedDocuments.length
+            });
+            
+            response = await sendMessageToAI(aiMessages);
             
             if (response.success) {
-              if (response.isComplete) {
-                setConversationPhase('ready');
-              } else {
-                setCurrentQuestionIndex(prev => prev + 1);
-                
-                // Extrair número da pergunta atual
-                const questionNumber = extractCurrentQuestionNumber(response.message);
-                if (questionNumber) {
-                  setCurrentQuestionNumber(questionNumber);
+              console.log('✅ Resposta da IA recebida com sucesso');
+            } else {
+              throw new Error('Falha na resposta da IA');
+            }
+          } catch (error) {
+            console.error('❌ Erro no chat direto:', error);
+            response = {
+              success: false,
+              message: `Desculpe, ocorreu um erro inesperado: ${error.message}. Tente novamente.`
+            };
+          }
+        } else {
+          // FLUXO NORMAL: Chat direto com IA
+          if (conversationPhase === 'questioning') {
+            // Validar resposta do usuário
+            const validation = await validateUserInput(userMessage.content, promptContent);
+            
+            if (validation.isValid) {
+              // Adicionar dado coletado
+              const newCollectedData = [...collectedData, {
+                question: messages[messages.length - 1]?.content || '',
+                answer: userMessage.content,
+                timestamp: new Date()
+              }];
+              setCollectedData(newCollectedData);
+              
+              // Gerar próxima pergunta incluindo contexto dos documentos
+              response = await generateNextQuestion(promptType, promptContent, newCollectedData, messages, attachedDocuments);
+              
+              if (response.success) {
+                if (response.isComplete) {
+                  setConversationPhase('ready');
+                } else {
+                  setCurrentQuestionIndex(prev => prev + 1);
+                  
+                  // Extrair número da pergunta atual
+                  const questionNumber = extractCurrentQuestionNumber(response.message);
+                  if (questionNumber) {
+                    setCurrentQuestionNumber(questionNumber);
+                  }
                 }
               }
-            }
-          } else {
-            // Resposta inválida - pedir esclarecimento
-            response = {
-              success: true,
-              message: `${validation.error || validation.message || 'Resposta inválida'}
+            } else {
+              // Resposta inválida - pedir esclarecimento
+              response = {
+                success: true,
+                message: `${validation.error || validation.message || 'Resposta inválida'}
 
 Por favor, reformule sua resposta de forma mais clara e detalhada.`,
+                isComplete: false
+              };
+            }
+          } else if (conversationPhase === 'ready') {
+            // Verificar se usuário digitou "GERAR"
+            if (userMessage.content.toUpperCase() === 'GERAR') {
+              try {
+                console.log('🤖 Gerando resultado final com OpenAI...');
+                response = await generateFinalResult(promptType, promptContent, collectedData, messages, attachedDocuments);
+                
+                if (response.success && response.message) {
+                  console.log('✅ Resultado gerado com sucesso!');
+                  setConversationPhase('completed');
+                } else {
+                  throw new Error('Resposta da IA inválida');
+                }
+              } catch (error) {
+                console.warn('⚠️ Erro ao usar IA, usando fallback:', error.message);
+                response = await generateSimpleFinalResult(promptType, collectedData);
+                setConversationPhase('completed');
+              }
+            } else {
+              response = {
+                success: true,
+                message: 'Para gerar o resultado final, digite exatamente "GERAR" (sem aspas).',
+                isComplete: false
+              };
+            }
+          } else if (conversationPhase === 'completed') {
+            response = {
+              success: true,
+              message: 'Esta conversa já foi finalizada. O resultado final foi gerado acima.',
               isComplete: false
             };
           }
-        } else if (conversationPhase === 'ready') {
-          // Gerar resultado final
-          console.log('🎯 Iniciando geração do resultado final...');
-          console.log('📋 Dados disponíveis:', {
-            promptType: promptType?.name,
-            hasPromptContent: !!promptContent,
-            collectedDataLength: collectedData?.length || 0,
-            messagesLength: messages?.length || 0
-          });
-          
-          // Usuário digitou algo diferente de "GERAR"
-          response = {
-            success: true,
-            message: 'Para gerar o resultado final, digite exatamente "GERAR" (sem aspas).',
-            isComplete: false
-          };
-        } else {
-          // Conversa já finalizada
-          response = {
-            success: true,
-            message: 'Esta conversa já foi finalizada. O resultado final foi gerado acima.',
-            isComplete: false
-          };
         }
       }
 
@@ -988,7 +1035,7 @@ Por favor, reformule sua resposta de forma mais clara e detalhada.`,
         messagePreview: response?.message?.substring(0, 100) || 'N/A'
       });
 
-      if (response.message) {
+      if (response?.message) {
         console.log('✅ Message válida encontrada, criando mensagem...', {
           success: response.success,
           messageLength: response.message.length
@@ -1001,23 +1048,12 @@ Por favor, reformule sua resposta de forma mais clara e detalhada.`,
           timestamp: new Date(),
           isResult: response.isResult || false,
           isFallback: response.isFallback || false,
-          isError: !response.success // Marcar como erro se success for false
+          isError: !response.success
         };
 
-        console.log('📝 Mensagem criada:', {
-          id: aiMessage.id,
-          role: aiMessage.role,
-          hasContent: !!aiMessage.content,
-          contentType: typeof aiMessage.content,
-          contentLength: aiMessage.content?.length || 0,
-          isError: aiMessage.isError
-        });
-
         const finalMessages = [...updatedMessages, aiMessage];
-        console.log('📦 Array final de mensagens:', finalMessages.length, 'items');
         setMessages(finalMessages);
 
-        // Salvar no Firestore se usuário estiver autenticado e não for chat offline
         if (user && currentChatId && !currentChatId.startsWith('offline-')) {
           try {
             await chatStorageService.saveProgress(
@@ -1027,33 +1063,22 @@ Por favor, reformule sua resposta de forma mais clara e detalhada.`,
               conversationPhase,
               attachedDocuments
             );
-          } catch (error) {
-            console.warn('Erro ao salvar progresso no Firestore:', error);
+          } catch (storageError) {
+            console.warn('Erro ao salvar progresso no Firestore:', storageError);
           }
         }
-      } else if (response.success && !response.message) {
-        // Caso onde success = true mas message está undefined
-        console.error('❌ ERRO CRÍTICO: Response.success = true mas message está undefined!');
-        console.error('🔍 Response completa:', response);
         
-        const errorMessage = {
-          id: Date.now() + 1,
-          role: 'assistant',
-          content: '❌ Erro interno no processamento. Tente novamente ou reinicie o fluxo.',
-          timestamp: new Date(),
-          isError: true
-        };
-
-        setMessages([...updatedMessages, errorMessage]);
+        // Parar de carregar após sucesso
+        setIsLoading(false);
       } else {
         // Erro na API - mensagem específica baseada no tipo de erro
         let errorContent = 'Desculpe, ocorreu um erro ao processar sua resposta. Tente novamente ou reformule sua resposta.';
         
-        if (response.error === 'rate_limit') {
+        if (response?.error === 'rate_limit') {
           errorContent = 'Muitas solicitações. Aguarde um momento antes de tentar novamente.';
-        } else if (response.error === 'context_length') {
+        } else if (response?.error === 'context_length') {
           errorContent = 'A conversa ficou muito longa. Vamos recomeçar com um novo chat.';
-        } else if (response.error === 'invalid_request') {
+        } else if (response?.error === 'invalid_request') {
           errorContent = 'Houve um problema com sua solicitação. Tente reformular sua pergunta.';
         }
 
@@ -1066,21 +1091,18 @@ Por favor, reformule sua resposta de forma mais clara e detalhada.`,
         };
 
         setMessages([...updatedMessages, errorMessage]);
+        setIsLoading(false);
       }
     } catch (error) {
       console.error('Erro ao enviar mensagem:', error);
+      setIsLoading(false);
       
-      // Mensagem de erro mais específica baseada no tipo de erro
       let errorContent = 'Desculpe, ocorreu um erro inesperado. Tente novamente.';
       
-      if (error.message.includes('API Key')) {
-        errorContent = `🔑 ${error.message}\n\nPara resolver:\n1. Configure sua API Key da OpenAI no arquivo .env\n2. Reinicie o servidor\n3. Consulte o arquivo OPENAI_API_SETUP.md para instruções detalhadas`;
-      } else if (error.message.includes('403')) {
-        errorContent = `🚫 Acesso negado à API da OpenAI.\n\nPossíveis causas:\n• API Key inválida ou expirada\n• Conta sem créditos\n• Limites excedidos\n\nVerifique sua conta em: https://platform.openai.com/`;
-      } else if (error.message.includes('429')) {
-        errorContent = `⏱️ Muitas requisições enviadas.\n\nAguarde alguns minutos antes de tentar novamente.`;
-      } else if (error.message.includes('400')) {
-        errorContent = `❌ Erro na requisição.\n\nTente reformular sua mensagem ou reiniciar a conversa.`;
+      if (error.message?.includes('API Key')) {
+        errorContent = `🔑 ${error.message}\n\nPara resolver:\n1. Configure sua API Key da OpenAI no arquivo .env\n2. Reinicie o servidor`;
+      } else if (error.message?.includes('403')) {
+        errorContent = '🚫 Acesso negado à API da OpenAI.';
       }
       
       const errorMessage = {
@@ -1092,8 +1114,6 @@ Por favor, reformule sua resposta de forma mais clara e detalhada.`,
       };
 
       setMessages([...updatedMessages, errorMessage]);
-    } finally {
-      setIsLoading(false);
     }
   };
 

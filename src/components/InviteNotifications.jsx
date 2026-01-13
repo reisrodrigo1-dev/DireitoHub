@@ -11,7 +11,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { collaborationService } from '../firebase/firestore';
-import { onSnapshot, collection, query, where } from 'firebase/firestore';
+import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../firebase/config';
 
 const InviteNotifications = () => {
@@ -32,114 +32,150 @@ const InviteNotifications = () => {
 
     console.log('✅ Usuário logado:', user.email, 'UID:', user.uid);
 
-    // Listener para convites recebidos - buscar por UID e email
-    const receivedQuery1 = query(
-      collection(db, 'collaboration_invites'),
-      where('targetUserId', '==', user.uid),
-      where('status', '==', 'pending')
-    );
+    let isMounted = true;
+    let pollInterval = null;
 
-    const receivedQuery2 = query(
-      collection(db, 'collaboration_invites'),
-      where('recipientEmail', '==', user.email),
-      where('status', '==', 'pending')
-    );
+    const loadInvites = async () => {
+      try {
+        console.log('📥 Carregando convites recebidos...');
+        
+        // Query 1: por UID
+        const receivedQuery1 = query(
+          collection(db, 'collaboration_invites'),
+          where('targetUserId', '==', user.uid),
+          where('status', '==', 'pending')
+        );
 
-    console.log('📥 Configurando listeners para convites recebidos...');
-    console.log('📥 Query 1 - por UID:', user.uid);
-    console.log('📥 Query 2 - por email:', user.email);
+        // Query 2: por email
+        const receivedQuery2 = query(
+          collection(db, 'collaboration_invites'),
+          where('recipientEmail', '==', user.email),
+          where('status', '==', 'pending')
+        );
 
-    const processReceivedInvites = async (snapshot, source) => {
-      console.log(`📥 Processando convites ${source}:`, snapshot.size, 'documentos');
-      const invites = [];
-      for (const doc of snapshot.docs) {
-        const inviteData = doc.data();
-        console.log(`📄 Convite recebido encontrado (${source}):`, doc.id, inviteData);
+        // Query 3: convites enviados
+        const sentQuery = query(
+          collection(db, 'collaboration_invites'),
+          where('senderUserId', '==', user.uid)
+        );
+
         try {
-          const senderData = await collaborationService.getUserById(inviteData.senderUserId);
-          const pageData = await collaborationService.getPageById(inviteData.pageId);
-          invites.push({
-            id: doc.id,
-            ...inviteData,
-            senderName: senderData?.data?.displayName || senderData?.data?.name || 'Usuário',
-            pageName: pageData?.data?.name || 'Página'
-          });
+          const [snapshot1, snapshot2, sentSnapshot] = await Promise.all([
+            getDocs(receivedQuery1).catch(err => {
+              console.warn('Aviso ao buscar convites por UID:', err.message);
+              return { docs: [] };
+            }),
+            getDocs(receivedQuery2).catch(err => {
+              console.warn('Aviso ao buscar convites por email:', err.message);
+              return { docs: [] };
+            }),
+            getDocs(sentQuery).catch(err => {
+              console.warn('Aviso ao buscar convites enviados:', err.message);
+              return { docs: [] };
+            })
+          ]);
+
+          if (!isMounted) return;
+
+          // Processar convites recebidos
+          const receivedInvitesData = [];
+          const uniqueIds = new Set();
+
+          for (const doc of [...snapshot1.docs, ...snapshot2.docs]) {
+            if (uniqueIds.has(doc.id)) continue;
+            uniqueIds.add(doc.id);
+
+            const inviteData = doc.data();
+            console.log('📄 Convite recebido:', doc.id, inviteData.status);
+            
+            try {
+              const senderData = await collaborationService.getUserById(inviteData.senderUserId);
+              const pageData = await collaborationService.getPageById(inviteData.pageId);
+              receivedInvitesData.push({
+                id: doc.id,
+                ...inviteData,
+                senderName: senderData?.data?.displayName || senderData?.data?.name || 'Usuário',
+                pageName: pageData?.data?.name || 'Página'
+              });
+            } catch (error) {
+              console.warn('Erro ao buscar dados do convite:', error.message);
+              receivedInvitesData.push({
+                id: doc.id,
+                ...inviteData,
+                senderName: 'Usuário',
+                pageName: 'Página'
+              });
+            }
+          }
+
+          // Processar convites enviados
+          const sentInvitesData = [];
+          for (const doc of sentSnapshot.docs) {
+            const inviteData = doc.data();
+            console.log('📤 Convite enviado:', doc.id);
+            
+            try {
+              const pageData = await collaborationService.getPageById(inviteData.pageId);
+              sentInvitesData.push({
+                id: doc.id,
+                ...inviteData,
+                pageName: pageData?.data?.name || 'Página'
+              });
+            } catch (error) {
+              console.warn('Erro ao buscar dados do convite enviado:', error.message);
+              sentInvitesData.push({
+                id: doc.id,
+                ...inviteData,
+                pageName: 'Página'
+              });
+            }
+          }
+
+          if (isMounted) {
+            setReceivedInvites(receivedInvitesData);
+            setSentInvites(sentInvitesData);
+            setLoading(false);
+          }
         } catch (error) {
-          console.error('Erro ao buscar dados do convite:', error);
-          invites.push({
-            id: doc.id,
-            ...inviteData,
-            senderName: 'Usuário',
-            pageName: 'Página'
-          });
+          console.error('Erro ao carregar convites:', error);
+          if (isMounted) {
+            setLoading(false);
+          }
+        }
+      } catch (error) {
+        console.error('Erro inesperado ao carregar convites:', error);
+        if (isMounted) {
+          setLoading(false);
         }
       }
-      console.log(`📥 Total convites recebidos processados (${source}):`, invites.length);
-      
-      // Atualizar estado com novos convites, removendo duplicatas
-      setReceivedInvites(prevInvites => {
-        const uniqueInvites = new Map();
-        
-        // Adicionar convites existentes
-        prevInvites.forEach(invite => uniqueInvites.set(invite.id, invite));
-        
-        // Adicionar novos convites
-        invites.forEach(invite => uniqueInvites.set(invite.id, invite));
-        
-        return Array.from(uniqueInvites.values());
-      });
     };
 
-    const unsubscribeReceived1 = onSnapshot(receivedQuery1, (snapshot) => {
-      processReceivedInvites(snapshot, 'UID');
-    });
+    // Carregar inicial
+    loadInvites();
 
-    const unsubscribeReceived2 = onSnapshot(receivedQuery2, (snapshot) => {
-      processReceivedInvites(snapshot, 'EMAIL');
-    });
-
-    // Listener para convites enviados
-    const sentQuery = query(
-      collection(db, 'collaboration_invites'),
-      where('senderUserId', '==', user.uid)
-    );
-
-    console.log('📤 Configurando listener para convites enviados...');
-
-    const unsubscribeSent = onSnapshot(sentQuery, async (snapshot) => {
-      console.log('📤 Snapshot convites enviados:', snapshot.size, 'documentos');
-      const invites = [];
-      for (const doc of snapshot.docs) {
-        const inviteData = doc.data();
-        console.log('📄 Convite enviado encontrado:', doc.id, inviteData);
-        try {
-          const pageData = await collaborationService.getPageById(inviteData.pageId);
-          invites.push({
-            id: doc.id,
-            ...inviteData,
-            pageName: pageData?.data?.name || 'Página'
-          });
-        } catch (error) {
-          console.error('Erro ao buscar dados do convite enviado:', error);
-          invites.push({
-            id: doc.id,
-            ...inviteData,
-            pageName: 'Página'
-          });
-        }
-      }
-      console.log('📤 Total convites enviados processados:', invites.length);
-      setSentInvites(invites);
-      setLoading(false);
-    });
+    // Polling a cada 10 segundos em vez de listeners em tempo real
+    // Isto evita os erros internos do Firebase SDK com watch_change
+    pollInterval = setInterval(loadInvites, 10000);
 
     return () => {
-      console.log('🧹 Limpando listeners...');
-      unsubscribeReceived1();
-      unsubscribeReceived2();
-      unsubscribeSent();
+      console.log('🧹 Limpando polling de convites...');
+      isMounted = false;
+      if (pollInterval) {
+        clearInterval(pollInterval);
+      }
     };
   }, [user]);
+
+  const handleDeleteInvite = async (inviteId) => {
+    if (!window.confirm('Tem certeza que deseja excluir este convite?')) return;
+    try {
+      await collaborationService.deleteInvite(inviteId);
+      setSentInvites(prev => prev.filter(invite => invite.id !== inviteId));
+    } catch (error) {
+      console.error('Erro ao excluir convite:', error);
+      alert('Erro ao excluir convite. Tente novamente.');
+    }
+  };
 
   const handleAcceptInvite = async (inviteId) => {
     try {

@@ -24,7 +24,11 @@ googleProvider.setCustomParameters({
 
 export const authService = {
   // Registrar novo usuário
-  async register(email, password, name, userType = 'cliente') {
+  async register(email, password, name, userType) {
+    if (!userType || !['cliente', 'advogado'].includes(userType)) {
+      return { success: false, error: 'Tipo de usuário inválido' };
+    }
+    
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
@@ -60,17 +64,44 @@ export const authService = {
   },
 
   // Login com email e senha
-  async login(email, password) {
+  async login(email, password, expectedUserType = null) {
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      return { success: true, user: userCredential.user };
+      const user = userCredential.user;
+
+      // Se um tipo específico é esperado, validar no Firestore
+      if (expectedUserType) {
+        try {
+          const userData = await userService.getUser(user.uid);
+          if (userData.success) {
+            const actualUserType = userData.data.userType;
+            if (actualUserType !== expectedUserType) {
+              // Fazer logout automático
+              await signOut(auth);
+              return {
+                success: false,
+                error: `Esta conta é de ${actualUserType === 'cliente' ? 'cliente' : 'advogado'}. Use a página de login apropriada.`
+              };
+            }
+          }
+        } catch (firestoreError) {
+          console.warn('Erro ao verificar tipo de usuário no Firestore:', firestoreError);
+          // Se não conseguir verificar, permitir login mas logar o erro
+        }
+      }
+
+      return { success: true, user };
     } catch (error) {
       return { success: false, error: error.message };
     }
   },
 
   // Login com Google
-  async loginWithGoogle(userType = 'cliente') {
+  async loginWithGoogle(expectedUserType) {
+    if (!expectedUserType || !['cliente', 'advogado'].includes(expectedUserType)) {
+      return { success: false, error: 'Tipo de usuário inválido' };
+    }
+    
     try {
       const result = await signInWithPopup(auth, googleProvider);
       const user = result.user;
@@ -86,7 +117,7 @@ export const authService = {
           await userService.createUser(user.uid, {
             name: user.displayName,
             email: user.email,
-            userType,
+            userType: expectedUserType,
             userCode,
             codeGeneratedAt: new Date(),
             createdAt: new Date(),
@@ -94,11 +125,24 @@ export const authService = {
           });
           
           console.log(`✅ Usuário Google registrado com código: ${userCode}`);
-        } else if (!userData.data.userCode) {
-          // Usuário existente sem código - gerar código
-          const assignResult = await userCodeService.assignCodeToUser(user.uid, userData.data.userType);
-          if (assignResult.success) {
-            console.log(`✅ Código ${assignResult.code} atribuído ao usuário existente`);
+        } else {
+          // Usuário existente - verificar se o tipo corresponde
+          const actualUserType = userData.data.userType;
+          if (actualUserType !== expectedUserType) {
+            // Fazer logout automático
+            await signOut(auth);
+            return {
+              success: false,
+              error: `Esta conta Google é de ${actualUserType === 'cliente' ? 'cliente' : 'advogado'}. Use a página de login apropriada.`
+            };
+          }
+
+          // Verificar se tem código, se não tiver, gerar
+          if (!userData.data.userCode) {
+            const assignResult = await userCodeService.assignCodeToUser(user.uid, userData.data.userType);
+            if (assignResult.success) {
+              console.log(`✅ Código ${assignResult.code} atribuído ao usuário existente`);
+            }
           }
         }
       } catch (firestoreError) {
@@ -112,21 +156,37 @@ export const authService = {
   },
 
   // Login com Facebook
-  async loginWithFacebook(userType = 'cliente') {
+  async loginWithFacebook(expectedUserType) {
+    if (!expectedUserType || !['cliente', 'advogado'].includes(expectedUserType)) {
+      return { success: false, error: 'Tipo de usuário inválido' };
+    }
+    
     try {
       const result = await signInWithPopup(auth, facebookProvider);
       const user = result.user;
       
       // Verificar se é novo usuário e salvar no Firestore
       const userData = await userService.getUser(user.uid);
-      if (!userData) {
+      if (!userData.success) {
+        // Usuário novo
         await userService.createUser(user.uid, {
           name: user.displayName,
           email: user.email,
-          userType,
+          userType: expectedUserType,
           createdAt: new Date(),
           profilePicture: user.photoURL
         });
+      } else {
+        // Usuário existente - verificar se o tipo corresponde
+        const actualUserType = userData.data.userType;
+        if (actualUserType !== expectedUserType) {
+          // Fazer logout automático
+          await signOut(auth);
+          return {
+            success: false,
+            error: `Esta conta Facebook é de ${actualUserType === 'cliente' ? 'cliente' : 'advogado'}. Use a página de login apropriada.`
+          };
+        }
       }
       
       return { success: true, user };

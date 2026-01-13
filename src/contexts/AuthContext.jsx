@@ -94,12 +94,38 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   // Função de login
-  const login = async (email, password) => {
+  const login = async (email, password, expectedUserType) => {
+    if (!expectedUserType || !['cliente', 'advogado'].includes(expectedUserType)) {
+      return { success: false, error: 'Tipo de usuário inválido' };
+    }
+    
     setLoading(true);
     const result = await authService.login(email, password);
     
     if (result.success) {
-      // Os dados do usuário serão carregados automaticamente pelo observer
+      // Aguardar os dados do usuário serem carregados
+      await new Promise(resolve => {
+        const checkUserData = () => {
+          if (userData) {
+            resolve();
+          } else {
+            setTimeout(checkUserData, 100);
+          }
+        };
+        checkUserData();
+      });
+
+      // Verificar se o tipo de usuário corresponde ao esperado
+      if (expectedUserType && userData?.userType !== expectedUserType) {
+        // Logout automático se o tipo não corresponder
+        await authService.logout();
+        setLoading(false);
+        return { 
+          success: false, 
+          error: `Esta conta é de ${userData.userType === 'cliente' ? 'cliente' : 'advogado'}. Use a página de login apropriada.` 
+        };
+      }
+
       return { success: true };
     }
     
@@ -108,7 +134,11 @@ export const AuthProvider = ({ children }) => {
   };
 
   // Função de registro
-  const register = async (email, password, name, userType = 'cliente') => {
+  const register = async (email, password, name, userType) => {
+    if (!userType || !['cliente', 'advogado'].includes(userType)) {
+      return { success: false, error: 'Tipo de usuário inválido' };
+    }
+    
     setLoading(true);
     const result = await authService.register(email, password, name, userType);
     
@@ -122,11 +152,38 @@ export const AuthProvider = ({ children }) => {
   };
 
   // Função de login com Google
-  const loginWithGoogle = async (userType = 'cliente') => {
+  const loginWithGoogle = async (expectedUserType) => {
+    if (!expectedUserType || !['cliente', 'advogado'].includes(expectedUserType)) {
+      return { success: false, error: 'Tipo de usuário inválido' };
+    }
+    
     setLoading(true);
-    const result = await authService.loginWithGoogle(userType);
+    const result = await authService.loginWithGoogle(expectedUserType);
     
     if (result.success) {
+      // Aguardar os dados do usuário serem carregados
+      await new Promise(resolve => {
+        const checkUserData = () => {
+          if (userData) {
+            resolve();
+          } else {
+            setTimeout(checkUserData, 100);
+          }
+        };
+        checkUserData();
+      });
+
+      // Verificar se o tipo de usuário corresponde ao esperado
+      if (userData?.userType !== expectedUserType) {
+        // Logout automático se o tipo não corresponder
+        await authService.logout();
+        setLoading(false);
+        return { 
+          success: false, 
+          error: `Esta conta é de ${userData.userType === 'cliente' ? 'cliente' : 'advogado'}. Use a página de login apropriada.` 
+        };
+      }
+
       return { success: true };
     }
     
@@ -135,11 +192,38 @@ export const AuthProvider = ({ children }) => {
   };
 
   // Função de login com Facebook
-  const loginWithFacebook = async (userType = 'cliente') => {
+  const loginWithFacebook = async (expectedUserType) => {
+    if (!expectedUserType || !['cliente', 'advogado'].includes(expectedUserType)) {
+      return { success: false, error: 'Tipo de usuário inválido' };
+    }
+    
     setLoading(true);
-    const result = await authService.loginWithFacebook(userType);
+    const result = await authService.loginWithFacebook(expectedUserType);
     
     if (result.success) {
+      // Aguardar os dados do usuário serem carregados
+      await new Promise(resolve => {
+        const checkUserData = () => {
+          if (userData) {
+            resolve();
+          } else {
+            setTimeout(checkUserData, 100);
+          }
+        };
+        checkUserData();
+      });
+
+      // Verificar se o tipo de usuário corresponde ao esperado
+      if (userData?.userType !== expectedUserType) {
+        // Logout automático se o tipo não corresponder
+        await authService.logout();
+        setLoading(false);
+        return { 
+          success: false, 
+          error: `Esta conta é de ${userData.userType === 'cliente' ? 'cliente' : 'advogado'}. Use a página de login apropriada.` 
+        };
+      }
+
       return { success: true };
     }
     

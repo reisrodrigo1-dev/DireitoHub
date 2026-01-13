@@ -2,65 +2,17 @@
 // Função para carregar dinamicamente os prompts dos arquivos
 export const loadPromptFiles = async () => {
   try {
-    // Lista de arquivos de prompt disponíveis (em produção, seria obtida via API)
+    // Lista de arquivos de prompt disponíveis - começando com o primeiro prompt
     const promptFiles = [
-      'Acrescentar Argumentos.odt',
-      'Agravo de instrumento.docx',
-      'Analisar laudos médicos.doc',
-      'Analisar PEC - Defensoria.odt',
-      'Analisar PEC.odt',
-      'Apelação (Dir. Privado, exceto trabalhista).docx',
-      'Apelação Criminal.odt',
-      'Apelação trabalhista.docx',
-      'Atualizar Valores pelo CC.odt',
-      'Busca de Jurisprudência.doc',
-      'contestação.doc',
-      'Contrarrazões cível-família.doc',
-      'Contrarrazões de Apelação Criminal.odt',
-      'Contrarrazões de Recurso Especial.odt',
-      'Contrarrazões de Recurso Extraordinário.odt',
-      'Correção do Português e Sugestões para peças.odt',
-      'Corrigir o Português e Deixar mais claro.odt',
-      'Depoimento da vítima x laudo médico.doc',
-      'Despacho Judicial.docx',
-      'Dosimetria da pena.doc',
-      'Ementa CNJ.odt',
-      'Ementa.odt',
-      'Encontrar contradições nos relatos das testemunhas.odt',
-      'Habeas Corpus.docx',
-      'Inicial de Alimentos.odt',
-      'Inserir fundamentos legais - cpc.odt',
-      'Inserir fundamentos legais.odt',
-      'Liberdade Provisória.docx',
-      'Linguagem Simples.odt',
-      'Localizador de endereço.odt',
-      'Manual de como usar.odt',
-      'Maximizar o impacto retórico.odt',
-      'Memoriais - Ministério Público.odt',
-      'Memoriais civel-consumidor.doc',
-      'Memoriais criminais.doc',
-      'Memoriais Previdenciários.doc',
-      'Memoriais Trabalhistas.doc',
-      'Perguntas parte contrária ou testemunhas.odt',
-      'Português mantendo a escrita.odt',
-      'Preparação de audiência trabalhista - Reclamando.docx',
-      'Preparação de audiência trabalhista - reclamante.docx',
-      'Projeto de Lei.odt',
-      'Quesitos.odt',
-      'Razões de RESE.doc',
-      'Rebater argumentos.odt',
-      'Relatório Criminal.odt',
-      'Relatório para Contestação ou Réplica.odt',
-      'Resume processos de familia para audiências..doc',
-      'Resumir processos criminais para a Defesa.odt',
-      'Resumo para assistidos - DPE.odt',
-      'Resumo para cliente.odt',
-      'Réplica.docx',
-      'Vítima x depoimentoi.odt'
+      'Corrigir o Português e Deixar mais claro.txt',
+      'Projeto de Lei.txt',
+      'Resumo para clientes.txt',
+      'Rebater Argumentos.txt',
+      'Busca de Jurisprudência.txt'
     ];
 
     const prompts = promptFiles.map(fileName => {
-      const nameWithoutExtension = fileName.replace(/\.(odt|docx|doc|pdf|zip)$/, '');
+      const nameWithoutExtension = fileName.replace(/\.(odt|docx|doc|pdf|zip|txt)$/, '');
       return createPromptFromFileName(nameWithoutExtension);
     });
 
@@ -73,17 +25,27 @@ export const loadPromptFiles = async () => {
 
 // Função para criar objeto prompt baseado no nome do arquivo
 const createPromptFromFileName = (fileName) => {
-  const id = fileName.toLowerCase()
-    .replace(/[^a-z0-9]/g, '-')
-    .replace(/-+/g, '-')
-    .replace(/^-|-$/g, '');
+  // Remover extensão primeiro
+  let nameWithoutExtension = fileName.replace(/\.(odt|docx|doc|pdf|zip|txt)$/, '');
+  
+  // Normalizar acentuações
+  const normalized = nameWithoutExtension
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '') // Remove acentuações
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '-') // Converte caracteres especiais em hífens
+    .replace(/-+/g, '-') // Remove hífens múltiplos
+    .replace(/^-|-$/g, ''); // Remove hífens nas extremidades
+  
+  const id = normalized;
 
   return {
     id: id,
     name: fileName,
     description: getDescriptionForPrompt(fileName),
     icon: getIconForPrompt(fileName),
-    category: getCategoryForPrompt(fileName)
+    category: getCategoryForPrompt(fileName),
+    welcomeMessage: getWelcomeMessageForPrompt(fileName)
   };
 };
 
@@ -197,371 +159,27 @@ const getCategoryForPrompt = (fileName) => {
   return 'Geral';
 };
 
+// Função para obter mensagem de boas-vindas para cada prompt
+const getWelcomeMessageForPrompt = (fileName) => {
+  const welcomeMessages = {
+    'Corrigir o Português e Deixar mais claro': 'Olá! Envie o texto que deseja corrigir. Vou analisar a gramática, concordância, pontuação e clareza, entregando um texto revisado e mais claro. Basta colar ou digitar o seu texto abaixo.',
+    'Projeto de Lei': 'Bem-vindo ao assistente de Projetos de Lei! Descreva qual lei você deseja elaborar, indicando: o tema, o objetivo, o público-alvo e qualquer detalhe importante. Vou redigir um projeto de lei completo, estruturado e em conformidade com as normas legislativas.',
+    'Resumo para clientes': 'Bem-vindo ao Resumo para Clientes! Compartilhe comigo o documento jurídico que deseja resumir (petição, parecer, recurso, etc.). Vou traduzir tudo para uma linguagem clara e acessível, explicando o que foi feito, a situação atual e os próximos passos. Seu cliente entenderá tudo perfeitamente!',
+    'Rebater Argumentos': 'Bem-vindo ao assistente de Rebater Argumentos! Compartilhe comigo os argumentos da parte contrária que você precisa refutar. Vou analisar ponto a ponto e elaborar uma contra-argumentação jurídica robusta, técnica e irrefutável, com fundamentação legal precisa. Indique também o foco/tema específico da refutação.',
+    'Busca de Jurisprudência': 'Bem-vindo ao assistente de Busca de Jurisprudência! Descreva o tema jurídico que precisa pesquisar e indique preferência de tribunal. Vou orientá-lo sobre onde buscar nas plataformas oficiais (STF, STJ, TRFs, TJs). Quando encontrar as decisões, compartilhe comigo (copie e cole ou anexe documentos) e vou formatar em 3 resultados com ementa, tribunal, processo e link direto.'
+  };
+
+  return welcomeMessages[fileName] || `Bem-vindo ao assistente "${fileName}"! Como posso ajudá-lo?`;
+};
+
 // Lista estática como fallback (mantida para compatibilidade)
 export const promptTypes = [
-  {
-    id: 'acrescentar-argumentos',
-    name: 'Acrescentar Argumentos',
-    description: 'Adiciona argumentos jurídicos sólidos a petições e manifestações',
-    icon: '⚖️',
-    category: 'Aprimoramento'
-  },
-  {
-    id: 'agravo-instrumento',
-    name: 'Agravo de Instrumento',
-    description: 'Elaboração e revisão de agravos de instrumento',
-    icon: '📄',
-    category: 'Recursos'
-  },
-  {
-    id: 'analisar-laudos',
-    name: 'Analisar Laudos Médicos',
-    description: 'Análise técnica de laudos médicos para processos judiciais',
-    icon: '🏥',
-    category: 'Análise'
-  },
-  {
-    id: 'analisar-pec',
-    name: 'Analisar PEC',
-    description: 'Análise de Propostas de Emenda Constitucional',
-    icon: '📋',
-    category: 'Análise'
-  },
-  {
-    id: 'analisar-pec-defensoria',
-    name: 'Analisar PEC - Defensoria',
-    description: 'Análise de PEC específica para Defensoria Pública',
-    icon: '🛡️',
-    category: 'Análise'
-  },
-  {
-    id: 'apelacao-privado',
-    name: 'Apelação (Direito Privado)',
-    description: 'Elaboração de apelações cíveis, exceto trabalhista',
-    icon: '⚖️',
-    category: 'Recursos'
-  },
-  {
-    id: 'apelacao-criminal',
-    name: 'Apelação Criminal',
-    description: 'Elaboração de apelações criminais',
-    icon: '🔒',
-    category: 'Criminal'
-  },
-  {
-    id: 'apelacao-trabalhista',
-    name: 'Apelação Trabalhista',
-    description: 'Elaboração de apelações trabalhistas',
-    icon: '👷',
-    category: 'Trabalhista'
-  },
-  {
-    id: 'atualizar-valores',
-    name: 'Atualizar Valores pelo CC',
-    description: 'Atualização de valores conforme Código Civil',
-    icon: '💰',
-    category: 'Cálculos'
-  },
-  {
-    id: 'busca-jurisprudencia',
-    name: 'Busca de Jurisprudência',
-    description: 'Pesquisa inteligente de jurisprudências relevantes',
-    icon: '🔍',
-    category: 'Pesquisa'
-  },
-  {
-    id: 'contestacao',
-    name: 'Contestação',
-    description: 'Elaboração de contestações processuais',
-    icon: '🛡️',
-    category: 'Defesa'
-  },
-  {
-    id: 'contrarrazoes-civel',
-    name: 'Contrarrazões Cível-Família',
-    description: 'Elaboração de contrarrazões cíveis e de família',
-    icon: '👨‍👩‍👧‍👦',
-    category: 'Recursos'
-  },
-  {
-    id: 'contrarrazoes-criminal',
-    name: 'Contrarrazões de Apelação Criminal',
-    description: 'Elaboração de contrarrazões criminais',
-    icon: '🔒',
-    category: 'Criminal'
-  },
-  {
-    id: 'contrarrazoes-resp',
-    name: 'Contrarrazões de Recurso Especial',
-    description: 'Elaboração de contrarrazões de RESP',
-    icon: '🏛️',
-    category: 'Recursos'
-  },
-  {
-    id: 'contrarrazoes-re',
-    name: 'Contrarrazões de Recurso Extraordinário',
-    description: 'Elaboração de contrarrazões de RE',
-    icon: '🏛️',
-    category: 'Recursos'
-  },
-  {
-    id: 'correcao-portugues',
-    name: 'Correção do Português e Sugestões',
-    description: 'Correção gramatical e sugestões para peças',
-    icon: '✍️',
-    category: 'Revisão'
-  },
   {
     id: 'corrigir-portugues',
     name: 'Corrigir o Português e Deixar mais claro',
     description: 'Correção e clarificação de textos jurídicos',
     icon: '📝',
     category: 'Revisão'
-  },
-  {
-    id: 'depoimento-vitima',
-    name: 'Depoimento da vítima x laudo médico',
-    description: 'Análise comparativa entre depoimentos e laudos',
-    icon: '🔍',
-    category: 'Análise'
-  },
-  {
-    id: 'despacho-judicial',
-    name: 'Despacho Judicial',
-    description: 'Elaboração de despachos judiciais',
-    icon: '👨‍⚖️',
-    category: 'Judicial'
-  },
-  {
-    id: 'dosimetria-pena',
-    name: 'Dosimetria da Pena',
-    description: 'Cálculo e análise de dosimetria penal',
-    icon: '⚖️',
-    category: 'Criminal'
-  },
-  {
-    id: 'ementa-cnj',
-    name: 'Ementa CNJ',
-    description: 'Elaboração de ementas conforme padrão CNJ',
-    icon: '📋',
-    category: 'Documentos'
-  },
-  {
-    id: 'ementa',
-    name: 'Ementa',
-    description: 'Elaboração de ementas jurídicas',
-    icon: '📄',
-    category: 'Documentos'
-  },
-  {
-    id: 'encontrar-contradicoes',
-    name: 'Encontrar contradições nos relatos das testemunhas',
-    description: 'Análise de inconsistências em depoimentos',
-    icon: '🔍',
-    category: 'Análise'
-  },
-  {
-    id: 'habeas-corpus',
-    name: 'Habeas Corpus',
-    description: 'Elaboração de habeas corpus',
-    icon: '🔓',
-    category: 'Criminal'
-  },
-  {
-    id: 'inicial-alimentos',
-    name: 'Inicial de Alimentos',
-    description: 'Elaboração de ação de alimentos',
-    icon: '👶',
-    category: 'Família'
-  },
-  {
-    id: 'inserir-fundamentos-cpc',
-    name: 'Inserir fundamentos legais - CPC',
-    description: 'Inserção de fundamentos do CPC',
-    icon: '📚',
-    category: 'Fundamentação'
-  },
-  {
-    id: 'inserir-fundamentos',
-    name: 'Inserir fundamentos legais',
-    description: 'Inserção de fundamentos jurídicos',
-    icon: '📖',
-    category: 'Fundamentação'
-  },
-  {
-    id: 'liberdade-provisoria',
-    name: 'Liberdade Provisória',
-    description: 'Elaboração de pedidos de liberdade provisória',
-    icon: '🔓',
-    category: 'Criminal'
-  },
-  {
-    id: 'linguagem-simples',
-    name: 'Linguagem Simples',
-    description: 'Conversão para linguagem simples e acessível',
-    icon: '💬',
-    category: 'Comunicação'
-  },
-  {
-    id: 'localizador-endereco',
-    name: 'Localizador de endereço',
-    description: 'Localização e verificação de endereços',
-    icon: '📍',
-    category: 'Pesquisa'
-  },
-  {
-    id: 'maximizar-impacto',
-    name: 'Maximizar o impacto retórico',
-    description: 'Aprimoramento retórico de peças',
-    icon: '🎯',
-    category: 'Aprimoramento'
-  },
-  {
-    id: 'memoriais-mp',
-    name: 'Memoriais - Ministério Público',
-    description: 'Elaboração de memoriais para o MP',
-    icon: '🏛️',
-    category: 'Memoriais'
-  },
-  {
-    id: 'memoriais-civel',
-    name: 'Memoriais Cível-Consumidor',
-    description: 'Elaboração de memoriais cíveis e de consumidor',
-    icon: '🛒',
-    category: 'Memoriais'
-  },
-  {
-    id: 'memoriais-criminais',
-    name: 'Memoriais Criminais',
-    description: 'Elaboração de memoriais criminais',
-    icon: '🔒',
-    category: 'Memoriais'
-  },
-  {
-    id: 'memoriais-previdenciarios',
-    name: 'Memoriais Previdenciários',
-    description: 'Elaboração de memoriais previdenciários',
-    icon: '👴',
-    category: 'Memoriais'
-  },
-  {
-    id: 'memoriais-trabalhistas',
-    name: 'Memoriais Trabalhistas',
-    description: 'Elaboração de memoriais trabalhistas',
-    icon: '👷',
-    category: 'Memoriais'
-  },
-  {
-    id: 'perguntas-parte-contraria',
-    name: 'Perguntas parte contrária ou testemunhas',
-    description: 'Elaboração de perguntas para audiências',
-    icon: '❓',
-    category: 'Audiência'
-  },
-  {
-    id: 'portugues-mantendo-escrita',
-    name: 'Português mantendo a escrita',
-    description: 'Correção preservando o estilo do autor',
-    icon: '✏️',
-    category: 'Revisão'
-  },
-  {
-    id: 'preparacao-audiencia-reclamando',
-    name: 'Preparação de audiência trabalhista - Reclamando',
-    description: 'Preparação para audiência trabalhista (reclamado)',
-    icon: '⚖️',
-    category: 'Trabalhista'
-  },
-  {
-    id: 'preparacao-audiencia-reclamante',
-    name: 'Preparação de audiência trabalhista - Reclamante',
-    description: 'Preparação para audiência trabalhista (reclamante)',
-    icon: '👷',
-    category: 'Trabalhista'
-  },
-  {
-    id: 'projeto-lei',
-    name: 'Projeto de Lei',
-    description: 'Elaboração de projetos de lei',
-    icon: '📜',
-    category: 'Legislativo'
-  },
-  {
-    id: 'quesitos',
-    name: 'Quesitos',
-    description: 'Elaboração de quesitos para perícias',
-    icon: '📋',
-    category: 'Perícia'
-  },
-  {
-    id: 'razoes-rese',
-    name: 'Razões de RESE',
-    description: 'Elaboração de razões de recurso especial',
-    icon: '📄',
-    category: 'Recursos'
-  },
-  {
-    id: 'rebater-argumentos',
-    name: 'Rebater argumentos',
-    description: 'Elaboração de teses para rebater argumentos',
-    icon: '🛡️',
-    category: 'Defesa'
-  },
-  {
-    id: 'relatorio-criminal',
-    name: 'Relatório Criminal',
-    description: 'Elaboração de relatórios criminais',
-    icon: '📊',
-    category: 'Criminal'
-  },
-  {
-    id: 'relatorio-contestacao',
-    name: 'Relatório para Contestação ou Réplica',
-    description: 'Relatórios para contestações e tréplicas',
-    icon: '📋',
-    category: 'Defesa'
-  },
-  {
-    id: 'resumir-processos-familia',
-    name: 'Resumir processos de família para audiências',
-    description: 'Resumos para audiências de família',
-    icon: '👨‍👩‍👧‍👦',
-    category: 'Família'
-  },
-  {
-    id: 'resumir-processos-criminais',
-    name: 'Resumir processos criminais para a Defesa',
-    description: 'Resumos de processos criminais',
-    icon: '🔒',
-    category: 'Criminal'
-  },
-  {
-    id: 'resumo-assistidos',
-    name: 'Resumo para assistidos - DPE',
-    description: 'Resumos para assistidos da Defensoria',
-    icon: '🛡️',
-    category: 'Defensoria'
-  },
-  {
-    id: 'resumo-cliente',
-    name: 'Resumo para cliente',
-    description: 'Resumos em linguagem acessível para clientes',
-    icon: '👤',
-    category: 'Comunicação'
-  },
-  {
-    id: 'replica',
-    name: 'Réplica',
-    description: 'Elaboração de tréplicas processuais',
-    icon: '↩️',
-    category: 'Defesa'
-  },
-  {
-    id: 'vitima-depoimento',
-    name: 'Vítima x depoimento',
-    description: 'Análise comparativa entre vítima e depoimentos',
-    icon: '🔍',
-    category: 'Análise'
   }
 ];
 
@@ -613,10 +231,18 @@ export const categories = [
 // Função para carregar o conteúdo de um arquivo de prompt específico
 export const loadPromptContent = async (promptId) => {
   try {
+    console.log('📥 Tentando carregar prompt com ID:', promptId);
+    
     // Mapear ID do prompt para nome do arquivo
     const promptFile = getPromptFileName(promptId);
     
+    console.log('🔍 Arquivo encontrado:', promptFile);
+    
     if (!promptFile) {
+      console.error('❌ Prompt não encontrado para ID:', promptId);
+      console.log('📋 IDs disponíveis:', Object.keys({
+        'corrigir-portugues': 'Corrigir o Português e Deixar mais claro.txt'
+      }));
       throw new Error('Prompt não encontrado');
     }
 
@@ -628,6 +254,10 @@ export const loadPromptContent = async (promptId) => {
     }
 
     const content = await response.text();
+    console.log('✅ Prompt carregado com sucesso:', {
+      file: promptFile,
+      length: content.length
+    });
     return content;
   } catch (error) {
     console.error('Erro ao carregar conteúdo do prompt:', error);
@@ -638,60 +268,19 @@ export const loadPromptContent = async (promptId) => {
 // Função para mapear ID do prompt para nome do arquivo
 const getPromptFileName = (promptId) => {
   const fileMapping = {
-    'acrescentar-argumentos': 'Acrescentar Argumentos.odt',
-    'agravo-de-instrumento': 'Agravo de instrumento.docx',
-    'analisar-laudos-medicos': 'Analisar laudos médicos.doc',
-    'analisar-pec---defensoria': 'Analisar PEC - Defensoria.odt',
-    'analisar-pec': 'Analisar PEC.odt',
-    'apelacao--dir--privado--exceto-trabalhista-': 'Apelação (Dir. Privado, exceto trabalhista).docx',
-    'apelacao-criminal': 'Apelação Criminal.odt',
-    'apelacao-trabalhista': 'Apelação trabalhista.docx',
-    'atualizar-valores-pelo-cc': 'Atualizar Valores pelo CC.odt',
-    'busca-de-jurisprudencia': 'Busca de Jurisprudência.doc',
-    'contestacao': 'contestação.doc',
-    'contrarrazoes-civel-familia': 'Contrarrazões cível-família.doc',
-    'contrarrazoes-de-apelacao-criminal': 'Contrarrazões de Apelação Criminal.odt',
-    'contrarrazoes-de-recurso-especial': 'Contrarrazões de Recurso Especial.odt',
-    'contrarrazoes-de-recurso-extraordinario': 'Contrarrazões de Recurso Extraordinário.odt',
-    'correcao-do-portugues-e-sugestoes-para-pecas': 'Correção do Português e Sugestões para peças.odt',
-    'corrigir-o-portugues-e-deixar-mais-claro': 'Corrigir o Português e Deixar mais claro.odt',
-    'depoimento-da-vitima-x-laudo-medico': 'Depoimento da vítima x laudo médico.doc',
-    'despacho-judicial': 'Despacho Judicial.docx',
-    'dosimetria-da-pena': 'Dosimetria da pena.doc',
-    'ementa-cnj': 'Ementa CNJ.odt',
-    'ementa': 'Ementa.odt',
-    'encontrar-contradicoes-nos-relatos-das-testemunhas': 'Encontrar contradições nos relatos das testemunhas.odt',
-    'habeas-corpus': 'Habeas Corpus.docx',
-    'inicial-de-alimentos': 'Inicial de Alimentos.odt',
-    'inserir-fundamentos-legais---cpc': 'Inserir fundamentos legais - cpc.odt',
-    'inserir-fundamentos-legais': 'Inserir fundamentos legais.odt',
-    'liberdade-provisoria': 'Liberdade Provisória.docx',
-    'linguagem-simples': 'Linguagem Simples.odt',
-    'localizador-de-endereco': 'Localizador de endereço.odt',
-    'manual-de-como-usar': 'Manual de como usar.odt',
-    'maximizar-o-impacto-retorico': 'Maximizar o impacto retórico.odt',
-    'memoriais---ministerio-publico': 'Memoriais - Ministério Público.odt',
-    'memoriais-civel-consumidor': 'Memoriais civel-consumidor.doc',
-    'memoriais-criminais': 'Memoriais criminais.doc',
-    'memoriais-previdenciarios': 'Memoriais Previdenciários.doc',
-    'memoriais-trabalhistas': 'Memoriais Trabalhistas.doc',
-    'perguntas-parte-contraria-ou-testemunhas': 'Perguntas parte contrária ou testemunhas.odt',
-    'portugues-mantendo-a-escrita': 'Português mantendo a escrita.odt',
-    'preparacao-de-audiencia-trabalhista---reclamando': 'Preparação de audiência trabalhista - Reclamando.docx',
-    'preparacao-de-audiencia-trabalhista---reclamante': 'Preparação de audiência trabalhista - reclamante.docx',
-    'projeto-de-lei': 'Projeto de Lei.odt',
-    'quesitos': 'Quesitos.odt',
-    'razoes-de-rese': 'Razões de RESE.doc',
-    'rebater-argumentos': 'Rebater argumentos.odt',
-    'relatorio-criminal': 'Relatório Criminal.odt',
-    'relatorio-para-contestacao-ou-replica': 'Relatório para Contestação ou Réplica.odt',
-    'resume-processos-de-familia-para-audiencias--': 'Resume processos de familia para audiências..doc',
-    'resumir-processos-criminais-para-a-defesa': 'Resumir processos criminais para a Defesa.odt',
-    'resumo-para-assistidos---dpe': 'Resumo para assistidos - DPE.odt',
-    'resumo-para-cliente': 'Resumo para cliente.odt',
-    'replica': 'Replica.txt',
-    'vitima-x-depoimentoi': 'Vítima x depoimentoi.odt'
+    'corrigir-o-portugues-e-deixar-mais-claro': 'Corrigir o Português e Deixar mais claro.txt',
+    'projeto-de-lei': 'Projeto de Lei.txt',
+    'resumo-para-clientes': 'Resumo para clientes.txt',
+    'rebater-argumentos': 'Rebater Argumentos.txt',
+    'busca-de-jurisprudencia': 'Busca de Jurisprudência.txt'
   };
 
   return fileMapping[promptId] || null;
+};
+
+// Exportar função para obter mensagem de boas-vindas
+export const getWelcomeMessage = (promptIdOrName) => {
+  // Procurar pela função interna
+  const messageFromFunction = getWelcomeMessageForPrompt(promptIdOrName);
+  return messageFromFunction;
 };

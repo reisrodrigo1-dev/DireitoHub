@@ -69,7 +69,7 @@ const ClientLogin = () => {
           return;
         }
 
-        const result = await login(formData.email, formData.password);
+        const result = await login(formData.email, formData.password, 'cliente');
         if (result.success) {
           setSuccess('Login realizado com sucesso! Redirecionando...');
           setTimeout(() => navigate('/dashboard-cliente'), 1500);

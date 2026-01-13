@@ -56,8 +56,18 @@ const ClientDashboard = () => {
     setIsLoading(true);
     try {
       if (user?.uid) {
+        console.log('📥 ClientDashboard carregando agendamentos para:', user.uid);
         const result = await appointmentService.getAppointmentsByClient(user.uid);
         if (result.success) {
+          console.log('✅ Agendamentos carregados:', result.data.length);
+          result.data.forEach(apt => {
+            console.log('📋 Agendamento:', {
+              id: apt.id,
+              lawyerName: apt.lawyerName,
+              paginaOrigem: apt.paginaOrigem,
+              selectedPageId: apt.selectedPageId
+            });
+          });
           setAppointments(result.data);
         } else {
           console.error('Erro ao carregar agendamentos:', result.error);
@@ -209,19 +219,50 @@ const ClientDashboard = () => {
                 </div>
               )}
 
-              <div className="flex items-center justify-between">
+              {appointment.paginaOrigem && (
+                <div className="mb-4 bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <h4 className="text-sm font-semibold text-blue-900 mb-2">📄 Página de Origem</h4>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-blue-800">
+                        <strong>{appointment.paginaOrigem.nomePagina}</strong>
+                      </p>
+                      <p className="text-xs text-blue-600 mt-1">
+                        {appointment.paginaOrigem.tipoPagina === 'escritorio' ? 'Escritório de Advocacia' : 'Página de Advogado'}
+                      </p>
+                      {appointment.paginaOrigem.slug && (
+                        <p className="text-xs text-blue-500 mt-1">
+                          /{appointment.paginaOrigem.slug}
+                        </p>
+                      )}
+                    </div>
+                    {(appointment.paginaOrigem?.slug || appointment.selectedPageId) && (
+                      <a
+                        href={appointment.paginaOrigem?.slug ? `/advogado/${appointment.paginaOrigem.slug}` : `/page/${appointment.selectedPageId}`}
+                        className="px-4 py-2 text-sm font-medium text-blue-600 bg-white border border-blue-300 rounded hover:bg-blue-50 transition-colors whitespace-nowrap ml-3"
+                      >
+                        Visitar
+                      </a>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              <div className="flex items-center justify-between gap-3">
                 <div className="text-sm text-gray-500">
                   Criado em {formatDate(appointment.createdAt)}
                 </div>
                 
-                {appointment.status === 'pendente' && (
-                  <button
-                    onClick={() => handleCancelAppointment(appointment.id)}
-                    className="px-4 py-2 text-sm font-medium text-red-600 bg-red-50 border border-red-200 rounded hover:bg-red-100 transition-colors"
-                  >
-                    Cancelar
-                  </button>
-                )}
+                <div className="flex gap-2">
+                  {appointment.status === 'pendente' && (
+                    <button
+                      onClick={() => handleCancelAppointment(appointment.id)}
+                      className="px-4 py-2 text-sm font-medium text-red-600 bg-red-50 border border-red-200 rounded hover:bg-red-100 transition-colors"
+                    >
+                      Cancelar
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           ))}

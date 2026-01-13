@@ -23,6 +23,8 @@ export const DOCUMENT_REQUIRED_PROMPTS = {
     'resumir-processos-familia-audiencias',
     'resumo-assistidos-dpe',
     'resumo-cliente',
+    'resumo-para-clientes',
+    'rebater-argumentos',
     'vitima-depoimento',
     'preparacao-audiencia-trabalhista-reclamando',
     'preparacao-audiencia-trabalhista-reclamante',
@@ -55,6 +57,7 @@ export const DOCUMENT_REQUIRED_PROMPTS = {
     'inicial-alimentos', // ← Pode usar documentos comprobatórios
     'quesitos', // ← Pode usar documentos do caso
     'projeto-lei', // ← Pode usar documentos de referência
+    'busca-de-jurisprudencia', // ← Pode se beneficiar de documento para contextualizar busca
     'perguntas-parte-contraria-testemunhas' // ← Pode usar documentos do processo
   ],
 
@@ -253,6 +256,96 @@ Para elaborar memoriais fundamentados, preciso dos documentos do processo:
 **Formatos aceitos:** .txt, .docx (máx. 10MB)
 
 Anexe os documentos processuais para elaboração dos memoriais.`;
+  }
+
+  if (promptId.includes('resumo-para-clientes')) {
+    return `📋 **Resumo para Clientes**
+
+Para criar um resumo claro e acessível para seu cliente, preciso da peça jurídica:
+
+**Documentos necessários:**
+- Petição, parecer, recurso ou outra peça jurídica
+- Documentação do processo (opcional)
+- Qualquer documento que deseja que seja resumido
+
+**📝 O que você receberá:**
+✅ Explicação simples e clara (sem jargão jurídico)
+✅ O que foi feito até agora
+✅ Situação legal atual
+✅ Próximos passos esperados
+✅ Glossário com termos técnicos
+✅ Respostas às dúvidas frequentes
+
+**Formatos aceitos:** .txt, .docx, .pdf (máx. 10MB)
+
+Anexe o documento que deseja resumir para seu cliente.`;
+  }
+
+  if (promptId.includes('rebater-argumentos')) {
+    return `⚖️ **Rebater Argumentos - Contra-argumentação Jurídica**
+
+Para elaborar uma contra-argumentação robusta e tecnicamente irrefutável, preciso dos argumentos que você deseja refutar:
+
+**Documentos necessários:**
+- Argumentos da parte contrária (peça processual, razões de recurso, contestação, etc.)
+- Indicação clara do foco/tema específico da refutação
+- Documentação relevante do processo (se houver)
+
+**📝 O que você receberá:**
+✅ Contra-argumentação ponto a ponto
+✅ Fundamentação legal precisa (com fontes)
+✅ Desconstrução lógica dos argumentos adversários
+✅ Antecipação de possíveis réplicas
+✅ Minuta pronta para uso processual
+✅ Linguagem técnico-jurídica formal
+
+**Formatos aceitos:** .txt, .docx, .pdf (máx. 10MB)
+
+Anexe o documento com os argumentos a serem refutados e indique o tema específico.`;
+  }
+
+  if (promptId.includes('busca-de-jurisprudencia')) {
+    return `🔍 **Busca de Jurisprudência - Orientação e Formatação**
+
+Este assistente ajuda você a localizar e formatar jurisprudência de forma profissional.
+
+**COMO FUNCIONA:**
+
+**Passo 1 - Indique seu tema:**
+- Descreva o tema jurídico ou artigo de lei
+- Indique preferência de tribunal (STF, STJ, TRF, TJ estadual, etc.)
+- Especifique ramo do direito (cível, criminal, trabalhista, etc.)
+
+**Passo 2 - Receba orientação:**
+- Vou indicar exatamente onde buscar
+- Forneço dicas de como fazer a pesquisa em cada site
+- Indico palavras-chave para usar
+
+**Passo 3 - Compartilhe as decisões:**
+- Copie e cole o conteúdo das decisões encontradas
+- Ou anexe PDFs das decisões
+- Ou compartilhe os links das plataformas
+
+**Passo 4 - Receba formatação profissional:**
+- Vou formatar 3 jurisprudências conforme padrão profissional
+- Com ementa, tribunal, número do processo, data e link
+- Pronto para usar em petições e memoriais
+
+**PLATAFORMAS PRINCIPAIS:**
+- **STF**: https://portal.stf.jus.br/
+- **STJ**: https://www.stj.jus.br/
+- **TRFs**: https://www.trf1.jus.br/ (e demais regiões)
+- **Jusbrasil**: https://www.jusbrasil.com.br/
+- **TJ-SP e outros TJs estaduais**
+
+**📝 O que você receberá:**
+✅ 3 jurisprudências formatadas
+✅ Ementa oficial de cada decisão
+✅ Tribunal e número do processo
+✅ Links diretos verificáveis
+✅ Pronto para usar profissionalmente
+
+Comece descrevendo seu tema jurídico!`;
   }
   
   if (promptId.includes('resumir') || promptId.includes('resumo')) {
