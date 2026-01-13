@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { FileText, Calendar, Briefcase, Users, Play, TrendingUp, Send, X } from 'lucide-react';
+import { FileText, Calendar, Briefcase, Users, Play, TrendingUp, Send, X, ZoomIn } from 'lucide-react';
 import { motion, useAnimation, useInView } from 'framer-motion';
 import ChatInterface from './ChatInterface';
 import { loadPromptFiles } from '../services/promptService';
@@ -9,6 +9,7 @@ const PitchDeck = () => {
   const [promptTypes, setPromptTypes] = useState([]);
   const [selectedPrompt, setSelectedPrompt] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [zoomedImage, setZoomedImage] = useState(null);
 
   // Hook para animações de scroll
   const useScrollAnimation = (threshold = 0.1) => {
@@ -138,6 +139,37 @@ useEffect(() => {
 
   return (
     <div className="min-h-screen bg-slate-900 relative overflow-hidden">
+      {/* Modal de Zoom de Imagem */}
+      {zoomedImage && (
+        <motion.div
+          className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4"
+          onClick={() => setZoomedImage(null)}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+        >
+          <motion.div
+            className="relative max-w-4xl max-h-[90vh]"
+            onClick={(e) => e.stopPropagation()}
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.9, opacity: 0 }}
+          >
+            <button
+              onClick={() => setZoomedImage(null)}
+              className="absolute top-4 right-4 bg-red-500 hover:bg-red-600 text-white p-2 rounded-full z-10"
+            >
+              <X size={24} />
+            </button>
+            <img
+              src={zoomedImage}
+              alt="Imagem ampliada"
+              className="w-full h-full object-contain rounded-lg"
+            />
+          </motion.div>
+        </motion.div>
+      )}
+
       {/* Background animado sutil */}
       <div className="fixed inset-0 opacity-30">
         <div className="absolute inset-0 bg-gradient-to-br from-blue-900/20 via-slate-900 to-purple-900/20 animate-pulse-slow"></div>
@@ -232,7 +264,7 @@ useEffect(() => {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.4, duration: 0.8 }}
           >
-            O Sistema Operacional da <span className="bg-gradient-to-r from-blue-400 via-cyan-400 to-blue-400 bg-clip-text text-transparent animate-pulse">Advocacia Inteligente</span>
+            O Sistema Operacional da <span className="text-white animate-pulse">Advocacia Inteligente</span>
           </motion.h1>
           <motion.p 
             className="text-2xl text-slate-100 font-semibold mb-8"
@@ -525,12 +557,23 @@ useEffect(() => {
             whileHover={{ scale: 1.02, y: -5 }}
             transition={{ duration: 0.3 }}
           >
-            <motion.div 
-              className="text-5xl mb-6"
-              animate={{ y: [0, -8, 0], rotate: [0, 5, 0] }}
-              transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+            <motion.div
+              className="relative group"
+              initial={{ opacity: 0, scale: 0.9 }}
+              whileInView={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.6 }}
             >
-              🧠
+              <motion.img 
+                src="/img/pitch-deck/JURI-IA.png"
+                alt="JuriIA"
+                className="w-full h-80 object-contain rounded-lg mb-6 bg-slate-700/30"
+              />
+              <button
+                onClick={() => setZoomedImage("/img/pitch-deck/JURI-IA.png")}
+                className="absolute top-4 right-4 bg-blue-500 hover:bg-blue-600 text-white p-3 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+              >
+                <ZoomIn size={20} />
+              </button>
             </motion.div>
             <h3 className="text-3xl font-bold mb-4 text-white">JuriIA</h3>
             <p className="text-slate-100 mb-6 text-lg">Motor de IA jurídica com RAG proprietário</p>
@@ -555,12 +598,23 @@ useEffect(() => {
             whileHover={{ scale: 1.02, y: -5 }}
             transition={{ duration: 0.3 }}
           >
-            <motion.div 
-              className="text-5xl mb-6"
-              animate={{ y: [0, -8, 0], rotate: [0, -5, 0] }}
-              transition={{ duration: 3, repeat: Infinity, ease: "easeInOut", delay: 1 }}
+            <motion.div
+              className="relative group"
+              initial={{ opacity: 0, scale: 0.9 }}
+              whileInView={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.6 }}
             >
-              🌐
+              <motion.img 
+                src="/img/pitch-deck/CRIE-SUA-PAGINA.png"
+                alt="Site Builder 24/7"
+                className="w-full h-80 object-contain rounded-lg mb-6 bg-slate-700/30"
+              />
+              <button
+                onClick={() => setZoomedImage("/img/pitch-deck/CRIE-SUA-PAGINA.png")}
+                className="absolute top-4 right-4 bg-blue-500 hover:bg-blue-600 text-white p-3 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+              >
+                <ZoomIn size={20} />
+              </button>
             </motion.div>
             <h3 className="text-3xl font-bold mb-4 text-white">Site Builder 24/7</h3>
             <p className="text-slate-100 mb-6 text-lg">Criação automática de página + agendamento integrado</p>
@@ -681,26 +735,47 @@ useEffect(() => {
       {/* FLUXO */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20 border-t border-slate-700">
         <h2 className="text-4xl font-bold mb-12 text-center text-white">Como Funciona</h2>
-        <div className="grid md:grid-cols-4 gap-6">
-          <div className="bg-slate-800 border border-slate-700 rounded-lg p-6 text-center">
-            <div className="text-4xl mb-4">1️⃣</div>
-            <h4 className="font-bold mb-2 text-white">Cliente Agendar</h4>
-            <p className="text-sm text-slate-100">Via página auto-gerada 24/7</p>
-          </div>
-          <div className="bg-slate-800 border border-slate-700 rounded-lg p-6 text-center">
-            <div className="text-4xl mb-4">2️⃣</div>
-            <h4 className="font-bold mb-2 text-white">Advogado Preenche CRM</h4>
-            <p className="text-sm text-slate-100">Partes, fatos, documentos</p>
-          </div>
-          <div className="bg-slate-800 border border-slate-700 rounded-lg p-6 text-center">
-            <div className="text-4xl mb-4">3️⃣</div>
-            <h4 className="font-bold mb-2 text-white">JuriIA Gera Peça</h4>
-            <p className="text-sm text-slate-100">Com RAG + contexto jurídico</p>
-          </div>
-          <div className="bg-gradient-to-br from-green-500/20 to-emerald-500/20 border border-green-500/30 rounded-lg p-6 text-center">
-            <div className="text-4xl mb-4">✅</div>
-            <h4 className="font-bold mb-2 text-white">Pronto para Protocolo</h4>
-            <p className="text-sm text-green-400 font-bold">80% automação</p>
+        <div className="grid md:grid-cols-2 gap-12 mb-12 items-center">
+          <motion.div
+            className="order-2 md:order-1 relative group"
+            initial={{ opacity: 0, x: -50 }}
+            whileInView={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.6 }}
+            viewport={{ once: true }}
+          >
+            <img 
+              src="/img/pitch-deck/AGENDE-SUA-CONSULTA.png"
+              alt="Agende sua Consulta"
+              className="w-full rounded-xl shadow-2xl shadow-blue-500/30"
+            />
+            <button
+              onClick={() => setZoomedImage("/img/pitch-deck/AGENDE-SUA-CONSULTA.png")}
+              className="absolute top-4 right-4 bg-blue-500 hover:bg-blue-600 text-white p-3 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+            >
+              <ZoomIn size={20} />
+            </button>
+          </motion.div>
+          <div className="order-1 md:order-2 grid grid-cols-2 gap-4">
+            <div className="bg-slate-800 border border-slate-700 rounded-lg p-6 text-center">
+              <div className="text-4xl mb-4">1️⃣</div>
+              <h4 className="font-bold mb-2 text-white">Cliente Agendar</h4>
+              <p className="text-sm text-slate-100">Via página auto-gerada 24/7</p>
+            </div>
+            <div className="bg-slate-800 border border-slate-700 rounded-lg p-6 text-center">
+              <div className="text-4xl mb-4">2️⃣</div>
+              <h4 className="font-bold mb-2 text-white">Advogado Preenche CRM</h4>
+              <p className="text-sm text-slate-100">Partes, fatos, documentos</p>
+            </div>
+            <div className="bg-slate-800 border border-slate-700 rounded-lg p-6 text-center">
+              <div className="text-4xl mb-4">3️⃣</div>
+              <h4 className="font-bold mb-2 text-white">JuriIA Gera Peça</h4>
+              <p className="text-sm text-slate-100">Com RAG + contexto jurídico</p>
+            </div>
+            <div className="bg-gradient-to-br from-green-500/20 to-emerald-500/20 border border-green-500/30 rounded-lg p-6 text-center">
+              <div className="text-4xl mb-4">✅</div>
+              <h4 className="font-bold mb-2 text-white">Pronto para Protocolo</h4>
+              <p className="text-sm text-green-400 font-bold">80% automação</p>
+            </div>
           </div>
         </div>
       </section>
@@ -770,13 +845,6 @@ useEffect(() => {
                   <td className="text-center py-3 px-4 text-blue-400 font-bold">R$ 4.5M</td>
                   <td className="text-center py-3 px-4 text-blue-400 font-bold">R$ 15M</td>
                   <td className="text-center py-3 px-4 text-blue-400 font-bold">R$ 81M</td>
-                </tr>
-                <tr className="hover:bg-slate-700/50">
-                  <td className="py-3 px-4 text-white">EBITDA</td>
-                  <td className="text-center py-3 px-4 text-red-400 font-bold">-32%</td>
-                  <td className="text-center py-3 px-4 text-orange-400 font-bold">-8%</td>
-                  <td className="text-center py-3 px-4 text-green-400 font-bold">+18%</td>
-                  <td className="text-center py-3 px-4 text-green-400 font-bold">+56%</td>
                 </tr>
               </tbody>
             </table>
