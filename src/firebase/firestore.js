@@ -1720,45 +1720,10 @@ const appointmentService = {
         updatedAt: serverTimestamp()
       });
       
-      // Buscar dados do agendamento para registrar no sistema financeiro
-      const appointmentDoc = await getDoc(appointmentRef);
-      if (appointmentDoc.exists()) {
-        const appointmentData = appointmentDoc.data();
-        let pageInfo = null;
-        if (appointmentData.selectedPageId) {
-          try {
-            const pageResult = await lawyerPageService.getPageById(appointmentData.selectedPageId);
-            if (pageResult.success && pageResult.data) {
-              pageInfo = pageResult.data;
-            }
-          } catch (e) {
-            console.error('Erro ao buscar dados da página para registro financeiro:', e);
-          }
-        }
-        // Registrar no sistema financeiro
-        if (appointmentData.finalPrice && appointmentData.finalPrice > 0) {
-          const financialRef = doc(collection(db, 'financial'));
-          batch.set(financialRef, {
-            type: 'receita',
-            amount: appointmentData.finalPrice,
-            description: `Consulta Jurídica - ${appointmentData.clientName}`,
-            category: 'consulta',
-            lawyerId: appointmentData.lawyerUserId,
-            clientId: appointmentData.clientUserId,
-            appointmentId: appointmentId,
-            pageId: appointmentData.selectedPageId || null,
-            pageName: pageInfo?.nomePagina || null,
-            pageSpecialization: pageInfo?.especialidade || null,
-            date: serverTimestamp(),
-            status: 'confirmado',
-            paymentMethod: paymentData.method || 'online',
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp()
-          });
-        }
-      }
-      
+      // Commitar apenas a atualização do appointment
+      // O registro financeiro será feito por uma Cloud Function ou pelo advogado
       await batch.commit();
+      
       return { success: true };
     } catch (error) {
       console.error('Erro ao confirmar pagamento:', error);

@@ -10,7 +10,8 @@ const EventModal = ({ event, selectedDate, onSave, onClose }) => {
     reminder: '15',
     category: 'meeting',
     location: '',
-    attendees: ''
+    attendees: '',
+    videoCallLink: ''
   });
 
   useEffect(() => {
@@ -24,7 +25,8 @@ const EventModal = ({ event, selectedDate, onSave, onClose }) => {
         reminder: event.reminder || '15',
         category: event.category || 'meeting',
         location: event.location || '',
-        attendees: event.attendees || ''
+        attendees: event.attendees || '',
+        videoCallLink: event.videoCallLink || ''
       });
     } else if (selectedDate) {
       setFormData(prev => ({
@@ -246,6 +248,35 @@ const EventModal = ({ event, selectedDate, onSave, onClose }) => {
                 placeholder="Detalhes adicionais sobre o compromisso"
               />
             </div>
+
+            {/* Link da Chamada */}
+            {formData.videoCallLink && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  🎥 Link da Chamada
+                </label>
+                <div className="flex items-center gap-2">
+                  <a
+                    href={formData.videoCallLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex-1 px-3 py-2 text-sm text-blue-600 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 truncate"
+                  >
+                    {formData.videoCallLink}
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(formData.videoCallLink);
+                      alert('Link copiado!');
+                    }}
+                    className="px-3 py-2 text-sm text-blue-600 hover:text-blue-700 font-medium"
+                  >
+                    Copiar
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Botões */}
             <div className="flex justify-end space-x-3 pt-6">

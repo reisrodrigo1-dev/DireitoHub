@@ -15,7 +15,7 @@ const EnhancedCalendar = () => {
   // Estados de filtro e busca
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedPage, setSelectedPage] = useState('all');
-  const [selectedStatus, setSelectedStatus] = useState('all');
+  const [selectedStatus, setSelectedStatus] = useState('confirmado-pago-aguardando'); // Mostrar confirmado, pago e aguardando_pagamento por padrão
   const [dateRange, setDateRange] = useState({
     start: '',
     end: ''
@@ -81,7 +81,10 @@ const EnhancedCalendar = () => {
       const pageMatch = selectedPage === 'all' || apt.selectedPageId === selectedPage;
 
       // Filtro por status
-      const statusMatch = selectedStatus === 'all' || apt.status === selectedStatus;
+      const statusMatch = selectedStatus === 'all' || 
+        (selectedStatus === 'confirmado-pago-aguardando' && (apt.status === 'confirmado' || apt.status === 'pago' || apt.status === 'aguardando_pagamento')) ||
+        (selectedStatus === 'confirmado-pago' && (apt.status === 'confirmado' || apt.status === 'pago')) ||
+        apt.status === selectedStatus;
 
       // Filtro rápido por período
       let quickFilterMatch = true;
@@ -185,7 +188,7 @@ const EnhancedCalendar = () => {
   const resetFilters = () => {
     setSearchTerm('');
     setSelectedPage('all');
-    setSelectedStatus('all');
+    setSelectedStatus('confirmado-pago-aguardando');
     setQuickFilter('all');
     setDateRange({ start: '', end: '' });
   };
@@ -370,9 +373,11 @@ const EnhancedCalendar = () => {
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 >
                   <option value="all">Todos os status</option>
+                  <option value="confirmado-pago-aguardando">✅ Confirmado, Pagos e Aguardando</option>
                   <option value="pendente">⏳ Pendente</option>
                   <option value="confirmado">✅ Confirmado</option>
                   <option value="pago">💳 Pago</option>
+                  <option value="aguardando_pagamento">💰 Aguardando Pagamento</option>
                   <option value="finalizado">🏁 Finalizado</option>
                   <option value="cancelado">❌ Cancelado</option>
                 </select>
