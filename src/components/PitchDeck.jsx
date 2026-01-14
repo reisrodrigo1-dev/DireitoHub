@@ -275,6 +275,22 @@ useEffect(() => {
             CRM Jurídico + Engenharia de Prompts Contextual
           </motion.p>
           <motion.div 
+            className="flex justify-center mb-6"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.8, duration: 0.6 }}
+          >
+            <motion.button 
+              onClick={() => setShowDemoModal(true)}
+              className="border-2 border-white text-white hover:bg-white/20 px-8 py-3 rounded-lg font-bold transition backdrop-blur"
+              whileHover={{ scale: 1.05, y: -2 }}
+              whileTap={{ scale: 0.95 }}
+              transition={{ duration: 0.2 }}
+            >
+              Ver Demo
+            </motion.button>
+          </motion.div>
+          <motion.div 
             className="inline-block bg-gradient-to-br from-slate-800 to-slate-700 border border-blue-500/30 rounded-xl p-8 shadow-2xl shadow-blue-500/10"
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -585,7 +601,7 @@ useEffect(() => {
               <li className="text-slate-100 flex gap-3"><span className="text-green-400 font-bold">✓</span> Integração com Gerenciador de Processos</li>
             </ul>
             <div className="mt-6 pt-6 border-t border-slate-700">
-              <p className="text-cyan-300 font-bold">~70% da receita Y2</p>
+              <p className="text-cyan-300 font-bold">~71.6% da receita Y2</p>
             </div>
           </motion.div>
 
@@ -626,7 +642,7 @@ useEffect(() => {
               <li className="text-slate-100 flex gap-3"><span className="text-green-400 font-bold">✓</span> Domínio personalizado e SSL inclusos</li>
             </ul>
             <div className="mt-6 pt-6 border-t border-slate-700">
-              <p className="text-purple-300 font-bold">~25% da receita Y2</p>
+              <p className="text-purple-300 font-bold">~12.8% da receita Y2</p>
             </div>
           </motion.div>
         </motion.div>
@@ -664,10 +680,12 @@ useEffect(() => {
             <h3 className="text-2xl font-bold mb-3 text-white">SaaS Recorrente</h3>
             <p className="text-slate-100 mb-4">Assinaturas mensais por tier de funcionalidades</p>
             <ul className="space-y-2 text-sm text-slate-100">
-              <li className="text-slate-100"><strong>Starter:</strong> R$ 79,90 - Autônomos</li>
-              <li className="text-slate-100"><strong>PRO:</strong> R$ 199,90 - Escritórios Ativos (RECOMENDADO)</li>
-              <li className="text-slate-100"><strong>Boutique:</strong> R$ 499,90 - Multi-usuários</li>
+              <li className="text-slate-100"><strong>Essencial:</strong> R$ 19,90 - Acesso a parceiros + 5 créditos de IA</li>
+              <li className="text-slate-100"><strong>Site Builder:</strong> R$ 79,90 - Criador de páginas e agendamentos + 30 créditos de IA</li>
+              <li className="text-slate-100"><strong>Escritório Pro:</strong> R$ 199,90 - Gestão de escritórios + 100 créditos de IA</li>
+              <li className="text-slate-100"><strong>Boutique (Equipe):</strong> R$ 499,90 - Multi-usuários + 500 créditos de IA</li>
             </ul>
+            <p className="text-xs text-slate-400 mt-2">Plano de aquisição e upgrade: créditos IA inclusos facilitam o onboarding e uso inicial das principais funcionalidades.</p>
             <div className="mt-4 pt-4 border-t border-slate-700">
               <div className="text-2xl font-bold text-cyan-400">R$ 3.15M</div>
               <div className="text-sm text-slate-200">~70% da receita Y2</div>
@@ -701,8 +719,65 @@ useEffect(() => {
               <li className="text-slate-100">Atração cross-sell dos usuários base</li>
             </ul>
             <div className="mt-4 pt-4 border-t border-slate-700">
-              <div className="text-2xl font-bold text-green-400">R$ 825K</div>
-              <div className="text-sm text-slate-200">~18% da receita Y2</div>
+              <div className="text-2xl font-bold text-green-400">R$ 823K</div>
+                <div className="text-sm text-slate-200">~15.6% da receita Y2</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Comparativo de Planos */}
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <h3 className="text-2xl font-bold mb-6 text-center text-white">Comparativo de Planos</h3>
+          <div className="grid sm:grid-cols-2 md:grid-cols-4 gap-6">
+            <div className="bg-slate-800 border border-slate-700 rounded-lg p-6 text-center">
+              <div className="text-sm text-slate-400">Essencial</div>
+              <div className="text-2xl font-bold text-white mt-2">R$ 19,90</div>
+              <p className="text-sm text-slate-200 mt-2">Acesso a parceiros • Ideal para experimentar</p>
+              <div className="mt-4 inline-block bg-slate-700 px-3 py-1 rounded-full text-sm text-slate-200">5 créditos IA</div>
+              <ul className="text-sm text-slate-100 mt-4 space-y-1">
+                <li>• Acesso a parceiros e conteúdos selecionados</li>
+                
+              </ul>
+              <button className="mt-6 w-full bg-blue-600 hover:bg-blue-500 text-white py-2 rounded-md">Assinar</button>
+            </div>
+
+            <div className="bg-slate-800 border border-slate-700 rounded-lg p-6 text-center">
+              <div className="text-sm text-slate-400">Site Builder</div>
+              <div className="text-2xl font-bold text-white mt-2">R$ 79,90</div>
+              <p className="text-sm text-slate-200 mt-2">Criador de páginas + agendamentos</p>
+              <div className="mt-4 inline-block bg-slate-700 px-3 py-1 rounded-full text-sm text-slate-200">30 créditos IA</div>
+              <ul className="text-sm text-slate-100 mt-4 space-y-1">
+                <li>• Páginas auto-geradas</li>
+                <li>• Agendamento integrado</li>
+                <li>• 30 créditos IA iniciais</li>
+              </ul>
+              <button className="mt-6 w-full bg-blue-600 hover:bg-blue-500 text-white py-2 rounded-md">Assinar</button>
+            </div>
+
+            <div className="bg-slate-800 border border-slate-700 rounded-lg p-6 text-center">
+              <div className="text-sm text-slate-400">Escritório Pro</div>
+              <div className="text-2xl font-bold text-white mt-2">R$ 199,90</div>
+              <p className="text-sm text-slate-200 mt-2">Gestão de escritórios • Usuários e permissões</p>
+              <div className="mt-4 inline-block bg-slate-700 px-3 py-1 rounded-full text-sm text-slate-200">100 créditos IA</div>
+              <ul className="text-sm text-slate-100 mt-4 space-y-1">
+                <li>• Gestão multi-usuário</li>
+                <li>• Relatórios e integrações</li>
+                <li>• 100 créditos IA iniciais</li>
+              </ul>
+              <button className="mt-6 w-full bg-blue-600 hover:bg-blue-500 text-white py-2 rounded-md">Assinar</button>
+            </div>
+
+            <div className="bg-slate-800 border border-slate-700 rounded-lg p-6 text-center">
+              <div className="text-sm text-slate-400">Boutique (Equipe)</div>
+              <div className="text-2xl font-bold text-white mt-2">R$ 499,90</div>
+              <p className="text-sm text-slate-200 mt-2">Equipe completa • Gestão avançada</p>
+              <div className="mt-4 inline-block bg-slate-700 px-3 py-1 rounded-full text-sm text-slate-200">500 créditos IA</div>
+              <ul className="text-sm text-slate-100 mt-4 space-y-1">
+                <li>• Contas por equipe e permissões</li>
+                <li>• Suporte prioritário</li>
+                <li>• 500 créditos IA iniciais</li>
+              </ul>
+              <button className="mt-6 w-full bg-blue-600 hover:bg-blue-500 text-white py-2 rounded-md">Assinar</button>
             </div>
           </div>
         </div>
@@ -713,18 +788,18 @@ useEffect(() => {
             <div>
               <h4 className="font-bold mb-4 text-cyan-400">Breakdown por Stream</h4>
               <ul className="space-y-3">
-                <li className="flex justify-between text-slate-100"><span>SaaS Recorrente</span> <span className="text-cyan-400 font-bold">R$ 3.15M (70%)</span></li>
-                <li className="flex justify-between text-slate-100"><span>Créditos IA</span> <span className="text-purple-400 font-bold">R$ 675K (15%)</span></li>
-                <li className="flex justify-between text-slate-100"><span>DireitoHub Flix Premium</span> <span className="text-green-400 font-bold">R$ 825K (18%)</span></li>
-                <li className="flex justify-between border-t border-slate-600 pt-3 mt-3 text-lg font-bold text-white"><span>TOTAL</span> <span className="text-cyan-400">R$ 4.65M (100%)</span></li>
+                <li className="flex justify-between text-slate-100"><span>SaaS Recorrente</span> <span className="text-cyan-400 font-bold">R$ 3.78M (71.6%)</span></li>
+                <li className="flex justify-between text-slate-100"><span>Créditos IA</span> <span className="text-purple-400 font-bold">R$ 675K (12.8%)</span></li>
+                <li className="flex justify-between text-slate-100"><span>DireitoHub Flix Premium</span> <span className="text-green-400 font-bold">R$ 823K (15.6%)</span></li>
+                <li className="flex justify-between border-t border-slate-600 pt-3 mt-3 text-lg font-bold text-white"><span>TOTAL</span> <span className="text-cyan-400">R$ 5.28M (100%)</span></li>
               </ul>
             </div>
             <div>
               <h4 className="font-bold mb-4 text-cyan-400">Métricas por Stream</h4>
               <ul className="space-y-3 text-sm text-slate-100">
-                <li><strong>1.800 usuários</strong> × R$ 175 avg MRR = R$ 3.15M</li>
+                <li><strong>1.800 usuários</strong> × R$ 175 avg MRR = R$ 3.78M (ARR)</li>
                 <li><strong>180 heavy users</strong> × R$ 3.750 consumo/ano = R$ 675K</li>
-                <li><strong>1.375 subscribers Flix</strong> × R$ 49,90 × 12 meses = R$ 825K</li>
+                <li><strong>1.375 subscribers Flix</strong> × R$ 49,90 × 12 meses = R$ 823.35K</li>
                 <li className="border-t border-slate-600 pt-3 mt-3"><strong>Mix recorrente:</strong> 100% (previsível e escalável)</li>
               </ul>
             </div>
@@ -842,7 +917,7 @@ useEffect(() => {
                 <tr className="hover:bg-slate-700/50">
                   <td className="py-3 px-4 text-white">Receita (ARR)</td>
                   <td className="text-center py-3 px-4 text-blue-400 font-bold">R$ 970K</td>
-                  <td className="text-center py-3 px-4 text-blue-400 font-bold">R$ 4.5M</td>
+                  <td className="text-center py-3 px-4 text-blue-400 font-bold">R$ 5.28M</td>
                   <td className="text-center py-3 px-4 text-blue-400 font-bold">R$ 15M</td>
                   <td className="text-center py-3 px-4 text-blue-400 font-bold">R$ 81M</td>
                 </tr>
