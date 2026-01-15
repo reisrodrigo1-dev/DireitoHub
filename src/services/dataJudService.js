@@ -983,6 +983,53 @@ function formatarCPF(cpf) {
 function formatarCNPJ(cnpj) {
   return cnpj.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5');
 }
+
+// Função para formatar datas de forma segura, evitando erros de "Invalid Date"
+function formatarDataSegura(data) {
+  try {
+    if (!data) return null;
+    
+    // Se já é uma string ISO válida, apenas extrair a data
+    if (typeof data === 'string') {
+      // Remover caracteres especiais inválidos
+      const dataLimpa = data.trim();
+      
+      // Verificar se é uma data válida
+      const date = new Date(dataLimpa);
+      if (isNaN(date.getTime())) {
+        console.warn('⚠️ Data inválida encontrada:', data);
+        return null;
+      }
+      
+      return date.toISOString().split('T')[0];
+    }
+    
+    // Se é um número (timestamp)
+    if (typeof data === 'number') {
+      const date = new Date(data);
+      if (isNaN(date.getTime())) {
+        console.warn('⚠️ Timestamp inválido encontrado:', data);
+        return null;
+      }
+      return date.toISOString().split('T')[0];
+    }
+    
+    // Se é um objeto Date
+    if (data instanceof Date) {
+      if (isNaN(data.getTime())) {
+        console.warn('⚠️ Objeto Date inválido encontrado');
+        return null;
+      }
+      return data.toISOString().split('T')[0];
+    }
+    
+    console.warn('⚠️ Tipo de data não suportado:', typeof data);
+    return null;
+  } catch (error) {
+    console.error('❌ Erro ao formatar data:', error, 'Data original:', data);
+    return null;
+  }
+}
 // Função para converter dados da API para o formato do sistema
 export const converterDadosDataJud = (dadosDataJud) => {
   console.log('🔄 Convertendo dados do DataJud:', dadosDataJud);
@@ -1048,8 +1095,8 @@ export const converterDadosDataJud = (dadosDataJud) => {
     // Campos adicionais para compatibilidade com o sistema
     title: `${dadosDataJud.classe?.nome || 'Processo'} - ${formatarNumeroProcesso(dadosDataJud.numeroProcesso)}`,
     court: dadosDataJud.orgaoJulgador?.nome || 'Órgão não informado',
-    startDate: dadosDataJud.dataAjuizamento ? new Date(dadosDataJud.dataAjuizamento).toISOString().split('T')[0] : null,
-    lastUpdate: dadosDataJud.dataHoraUltimaAtualizacao ? new Date(dadosDataJud.dataHoraUltimaAtualizacao).toISOString().split('T')[0] : null,
+    startDate: dadosDataJud.dataAjuizamento ? formatarDataSegura(dadosDataJud.dataAjuizamento) : null,
+    lastUpdate: dadosDataJud.dataHoraUltimaAtualizacao ? formatarDataSegura(dadosDataJud.dataHoraUltimaAtualizacao) : null,
     nextHearing: extrairDataAudiencia(dadosDataJud.movimentos),
     priority: 'normal',
     description: gerarDescricaoProcesso(dadosDataJud)
@@ -1077,7 +1124,7 @@ const extrairDataAudiencia = (movimentos) => {
 
   // Tentar extrair data do complemento ou da data do movimento
   if (ultimaAudiencia.dataHora) {
-    return new Date(ultimaAudiencia.dataHora).toISOString().split('T')[0];
+    return formatarDataSegura(ultimaAudiencia.dataHora);
   }
 
   return null;
