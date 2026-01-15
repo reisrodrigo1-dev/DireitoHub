@@ -65,6 +65,8 @@ const DataJudSearchModalSimple = ({ isOpen, onClose, onProcessoSelect }) => {
 
       if (result.success) {
         const dados = Array.isArray(result.data) ? result.data : [result.data];
+        console.log('📊 Dados a exibir:', dados);
+        console.log('📊 Quantidade de resultados:', dados.length);
         setResultados(dados);
         
         if (dados.length === 0) {
@@ -181,7 +183,7 @@ const DataJudSearchModalSimple = ({ isOpen, onClose, onProcessoSelect }) => {
               
               {resultados.map((processo, index) => (
                 <div
-                  key={processo._id || index}
+                  key={processo.id || processo._id || index}
                   onClick={() => handleProcessoClick(processo)}
                   className={`border rounded-lg p-4 cursor-pointer transition-all duration-200 ${
                     processoSelecionado === processo
