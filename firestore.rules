@@ -24,21 +24,27 @@ service cloud.firestore {
     // CLIENTES - Acesso Privado
     // ============================================
     match /clients/{clientId} {
-      allow read, write: if request.auth != null && 
-                         request.auth.uid == resource.data.userId;
+      allow create: if request.auth != null && 
+                    request.auth.uid == request.resource.data.userId;
+      allow read, update, delete: if request.auth != null && 
+                                   request.auth.uid == resource.data.userId;
     }
 
     // ============================================
     // PROCESSOS/CASOS - Acesso Privado
     // ============================================
     match /processes/{caseId} {
-      allow read, write: if request.auth != null && 
-                         request.auth.uid == resource.data.userId;
+      allow create: if request.auth != null && 
+                    request.auth.uid == request.resource.data.userId;
+      allow read, update, delete: if request.auth != null && 
+                                   request.auth.uid == resource.data.userId;
     }
 
     match /cases/{caseId} {
-      allow read, write: if request.auth != null && 
-                         request.auth.uid == resource.data.userId;
+      allow create: if request.auth != null && 
+                    request.auth.uid == request.resource.data.userId;
+      allow read, update, delete: if request.auth != null && 
+                                   request.auth.uid == resource.data.userId;
     }
 
     // ============================================
@@ -90,26 +96,34 @@ service cloud.firestore {
     // CHATS - Acesso Privado
     // ============================================
     match /chats/{chatId} {
-      allow read, write: if request.auth != null && 
-                         (request.auth.uid == resource.data.userId ||
-                          request.auth.uid == resource.data.assistantId);
+      allow create: if request.auth != null && 
+                    (request.auth.uid == request.resource.data.userId ||
+                     request.auth.uid == request.resource.data.assistantId);
+      allow read, update, delete: if request.auth != null && 
+                                   (request.auth.uid == resource.data.userId ||
+                                    request.auth.uid == resource.data.assistantId);
     }
 
     // ============================================
     // DOCUMENTOS - Acesso Privado
     // ============================================
     match /documents/{documentId} {
-      allow read, write: if request.auth != null && 
-                         request.auth.uid == resource.data.userId;
+      allow create: if request.auth != null && 
+                    request.auth.uid == request.resource.data.userId;
+      allow read, update, delete: if request.auth != null && 
+                                   request.auth.uid == resource.data.userId;
     }
 
     // ============================================
     // PAGAMENTOS - Acesso Privado
     // ============================================
     match /payments/{paymentId} {
-      allow read, write: if request.auth != null && 
-                         (request.auth.uid == resource.data.userId ||
-                          request.auth.uid == resource.data.lawyerId);
+      allow create: if request.auth != null && 
+                    (request.auth.uid == request.resource.data.userId ||
+                     request.auth.uid == request.resource.data.lawyerId);
+      allow read, update, delete: if request.auth != null && 
+                                   (request.auth.uid == resource.data.userId ||
+                                    request.auth.uid == resource.data.lawyerId);
     }
 
     // ============================================
@@ -125,27 +139,34 @@ service cloud.firestore {
     // COLABORAÇÕES - Acesso Privado
     // ============================================
     match /collaborations/{collaborationId} {
-      allow read, write: if request.auth != null && 
-                         (request.auth.uid == resource.data.ownerUserId ||
-                          request.auth.uid == resource.data.collaboratorUserId);
+      allow create: if request.auth != null && 
+                    (request.auth.uid == request.resource.data.ownerUserId ||
+                     request.auth.uid == request.resource.data.collaboratorUserId);
+      allow read, update, delete: if request.auth != null && 
+                                   (request.auth.uid == resource.data.ownerUserId ||
+                                    request.auth.uid == resource.data.collaboratorUserId);
     }
 
     // ============================================
     // CONVITES - Acesso Privado
     // ============================================
     match /invites/{inviteId} {
-      allow read, write: if request.auth != null && 
-                         (request.auth.uid == resource.data.senderUserId ||
-                          request.auth.uid == resource.data.recipientUserId);
+      allow create: if request.auth != null && 
+                    (request.auth.uid == request.resource.data.senderUserId);
+      allow read, update, delete: if request.auth != null && 
+                                   (request.auth.uid == resource.data.senderUserId ||
+                                    request.auth.uid == resource.data.recipientUserId);
     }
 
     // ============================================
     // COLLABORATION INVITES - Acesso Privado
     // ============================================
     match /collaboration_invites/{inviteId} {
-      allow read, write: if request.auth != null && 
-                         (request.auth.uid == resource.data.senderUserId ||
-                          request.auth.email == resource.data.recipientEmail);
+      allow create: if request.auth != null && 
+                    (request.auth.uid == request.resource.data.senderUserId);
+      allow read, update, delete: if request.auth != null && 
+                                   (request.auth.uid == resource.data.senderUserId ||
+                                    request.auth.uid == resource.data.recipientUserId);
     }
   }
 }
