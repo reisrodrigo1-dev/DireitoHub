@@ -1201,7 +1201,7 @@ const ProcessesScreen = () => {
                 // Datas específicas
                 dataAjuizamento: selectedProcess.dataAjuizamento,
                 dataHoraUltimaAtualizacao: selectedProcess.dataHoraUltimaAtualizacao,
-                dataImportacao: selectedProcess.dataImportacao,
+                dataImportacao: selectedProcess.dataImportacao || new Date().toISOString(),
                 
                 // Números e identificadores
                 numeroProcesso: selectedProcess.numeroProcesso,
@@ -1218,8 +1218,7 @@ const ProcessesScreen = () => {
                 
                 // Metadados
                 isFromDataJud: true,
-                isSimulated: selectedProcess.isSimulated || false,
-                dataImportacao: selectedProcess.dataImportacao || new Date().toISOString()
+                isSimulated: selectedProcess.isSimulated || false
               })
             };
             
