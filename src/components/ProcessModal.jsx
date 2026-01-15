@@ -21,12 +21,13 @@ const ProcessModal = ({ process, selectedDate, onSave, onClose }) => {
 
   useEffect(() => {
     if (process) {
+      console.log('📋 Preenchendo formulário com processo:', process);
       setFormData({
-        title: process.title || '',
-        processNumber: process.processNumber || '',
-        court: process.court || '',
+        title: process.title || process.classeNome || '',
+        processNumber: process.processNumber || process.numeroProcesso || process.numeroProcessoFormatado || '',
+        court: process.court || process.orgaoJulgadorNome || '',
         description: process.description || '',
-        date: process.date || '',
+        date: process.date || process.startDate || '',
         time: process.time || '',
         type: process.type || 'hearing',
         status: process.status || 'pending',
@@ -34,7 +35,7 @@ const ProcessModal = ({ process, selectedDate, onSave, onClose }) => {
         opposingParty: process.opposingParty || '',
         lawyer: process.lawyer || '',
         judge: process.judge || '',
-        subject: process.subject || '',
+        subject: process.subject || process.classeNome || '',
         priority: process.priority || 'medium',
         reminder: process.reminder || '60'
       });
@@ -110,6 +111,53 @@ const ProcessModal = ({ process, selectedDate, onSave, onClose }) => {
               </svg>
             </button>
           </div>
+
+          {/* Informações do DataJud */}
+          {process && process.isFromDataJud && (
+            <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+              <div className="flex items-start">
+                <div className="flex-shrink-0">
+                  <span className="inline-block px-3 py-1 bg-yellow-300 text-yellow-900 text-xs font-semibold rounded-full">DataJud</span>
+                </div>
+                <div className="ml-4 flex-grow">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <span className="font-semibold text-gray-700">Número:</span> 
+                      <span className="text-gray-900 ml-2">{process.numeroProcessoFormatado || process.numeroProcesso}</span>
+                    </div>
+                    <div>
+                      <span className="font-semibold text-gray-700">Tribunal:</span> 
+                      <span className="text-gray-900 ml-2">{process.tribunal}</span>
+                    </div>
+                    <div>
+                      <span className="font-semibold text-gray-700">Classe:</span> 
+                      <span className="text-gray-900 ml-2">{process.classeNome}</span>
+                    </div>
+                    <div>
+                      <span className="font-semibold text-gray-700">Status:</span> 
+                      <span className="text-gray-900 ml-2">{process.status}</span>
+                    </div>
+                    {process.polos && (process.polos.autores?.length > 0 || process.polos.requeridos?.length > 0) && (
+                      <>
+                        {process.polos.autores?.length > 0 && (
+                          <div>
+                            <span className="font-semibold text-gray-700">Autores:</span> 
+                            <span className="text-gray-900 ml-2">{process.polos.autores.map(a => a.nome).join(', ')}</span>
+                          </div>
+                        )}
+                        {process.polos.requeridos?.length > 0 && (
+                          <div>
+                            <span className="font-semibold text-gray-700">Requeridos:</span> 
+                            <span className="text-gray-900 ml-2">{process.polos.requeridos.map(r => r.nome).join(', ')}</span>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* Título */}

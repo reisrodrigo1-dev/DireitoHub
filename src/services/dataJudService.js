@@ -1149,6 +1149,64 @@ export const converterDadosDataJud = (dadosDataJud) => {
     isSimulated: false,
     dataImportacao: new Date().toISOString(),
 
+    // CAMPOS EXTRAS - Máximo de informações possível
+    // Partes do processo (se disponível)
+    partes: dadosDataJud.partes || [],
+    representantes: dadosDataJud.representantes || [],
+    
+    // Valor da causa
+    valorCausa: dadosDataJud.valorCausa || null,
+    
+    // Informações adicionais do processo
+    numeroUnico: dadosDataJud.numeroUnico || null,
+    numeroOrigem: dadosDataJud.numeroOrigem || null,
+    
+    // Segurança e sigilo
+    sigiloDados: dadosDataJud.sigiloDados || false,
+    
+    // Informações do órgão julgador expandidas
+    orgaoJulgadorCompleto: {
+      codigo: dadosDataJud.orgaoJulgador?.codigo,
+      nome: dadosDataJud.orgaoJulgador?.nome,
+      codigoMunicipio: dadosDataJud.orgaoJulgador?.codigoMunicipio,
+      codigoMunicipioIBGE: dadosDataJud.orgaoJulgador?.codigoMunicipioIBGE,
+      tribunal: dadosDataJud.tribunal,
+      grau: dadosDataJud.grau
+    },
+    
+    // Informações de classe expandidas
+    classeCompleta: {
+      codigo: dadosDataJud.classe?.codigo,
+      nome: dadosDataJud.classe?.nome
+    },
+    
+    // Assuntos expandidos
+    assuntosCompletos: (dadosDataJud.assuntos || []).map(a => ({
+      codigo: a.codigo,
+      nome: a.nome
+    })),
+    
+    // Movimentos expandidos (últimos 5 com details)
+    ultimosMovimentos: (dadosDataJud.movimentos || []).slice(0, 5).map(m => ({
+      codigo: m.codigo,
+      nome: m.nome,
+      dataHora: m.dataHora,
+      complementosTabelados: m.complementosTabelados
+    })),
+    
+    // Resumo para exibição rápida
+    resumoProcesso: {
+      numeroProcesso: dadosDataJud.numeroProcesso,
+      numeroFormatado: formatarNumeroProcesso(dadosDataJud.numeroProcesso),
+      classe: dadosDataJud.classe?.nome || 'N/A',
+      tribunal: dadosDataJud.tribunal || 'N/A',
+      status: mapearStatusProcesso(dadosDataJud.movimentos),
+      dataAjuizamento: dadosDataJud.dataAjuizamento,
+      ultimaAtualizacao: dadosDataJud.dataHoraUltimaAtualizacao,
+      totalMovimentos: (dadosDataJud.movimentos || []).length,
+      orgao: dadosDataJud.orgaoJulgador?.nome || 'N/A'
+    },
+
     // Campos adicionais para compatibilidade com o sistema
     title: `${dadosDataJud.classe?.nome || 'Processo'} - ${formatarNumeroProcesso(dadosDataJud.numeroProcesso)}`,
     court: dadosDataJud.orgaoJulgador?.nome || 'Órgão não informado',
