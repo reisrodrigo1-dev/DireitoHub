@@ -30,16 +30,7 @@ export default defineConfig({
       timeout: 10000,
       overlay: false
     },
-    proxy: {
-      '/api/datajud': {
-        target: 'https://api-publica.datajud.cnj.jus.br',
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api\/datajud/, ''),
-        headers: {
-          'Authorization': 'APIKey cDZHYzlZa0JadVREZDJCendQbXY6SkJlTzNjLV9TRENyQk1RdnFKZGRQdw=='
-        }
-      }
-    }
+    proxy: {}
   },
   preview: {
     port: 5173,

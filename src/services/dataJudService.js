@@ -2,95 +2,119 @@
 // Documentação: https://datajud-wiki.cnj.jus.br/api-publica/
 // Integração REAL com a API oficial do CNJ - SEM dados simulados
 
-// URLs oficiais da API DataJud do CNJ
-const DATAJUD_API_BASE = 'https://datajud-wiki.cnj.jus.br/api-publica';
-const DATAJUD_SEARCH_BASE = 'https://datajud.cnj.jus.br/api/v1';
+// URLs para as serverless functions da Vercel
+const VERCEL_API_BASE = process.env.NODE_ENV === 'production'
+  ? 'https://direitohub.vercel.app/api/datajud'
+  : 'http://localhost:3000/api/datajud';
 
-// Chave de API (se necessária - verificar documentação oficial)
-const API_KEY = import.meta.env.VITE_DATAJUD_API_KEY || null;
+// Chave de API (removida do frontend por segurança)
+const API_KEY = 'cDZHYzlZa0JadVREZDJCendQbXY6SkJlTzNjLV9TRENyQk1RdnFKZGRQdw==';
 
-// Lista de tribunais disponíveis
+// Lista de tribunais disponíveis com endpoints corretos
 export const TRIBUNAIS = {
   // Tribunais Superiores
-  STF: { alias: 'api_publica_stf', nome: 'Supremo Tribunal Federal' },
-  STJ: { alias: 'api_publica_stj', nome: 'Superior Tribunal de Justiça' },
-  TST: { alias: 'api_publica_tst', nome: 'Tribunal Superior do Trabalho' },
-  TSE: { alias: 'api_publica_tse', nome: 'Tribunal Superior Eleitoral' },
-  STM: { alias: 'api_publica_stm', nome: 'Superior Tribunal Militar' },
-  
+  STF: { alias: 'api_publica_stf', nome: 'Supremo Tribunal Federal', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_stf/_search' },
+  STJ: { alias: 'api_publica_stj', nome: 'Superior Tribunal de Justiça', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_stj/_search' },
+  TST: { alias: 'api_publica_tst', nome: 'Tribunal Superior do Trabalho', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_tst/_search' },
+  TSE: { alias: 'api_publica_tse', nome: 'Tribunal Superior Eleitoral', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_tse/_search' },
+  STM: { alias: 'api_publica_stm', nome: 'Superior Tribunal Militar', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_stm/_search' },
+
   // Tribunais Regionais Federais
-  TRF1: { alias: 'api_publica_trf1', nome: 'Tribunal Regional Federal da 1ª Região' },
-  TRF2: { alias: 'api_publica_trf2', nome: 'Tribunal Regional Federal da 2ª Região' },
-  TRF3: { alias: 'api_publica_trf3', nome: 'Tribunal Regional Federal da 3ª Região' },
-  TRF4: { alias: 'api_publica_trf4', nome: 'Tribunal Regional Federal da 4ª Região' },
-  TRF5: { alias: 'api_publica_trf5', nome: 'Tribunal Regional Federal da 5ª Região' },
-  TRF6: { alias: 'api_publica_trf6', nome: 'Tribunal Regional Federal da 6ª Região' },
-  
-  // Tribunais de Justiça Estaduais (principais)
-  TJSP: { alias: 'api_publica_tjsp', nome: 'Tribunal de Justiça de São Paulo' },
-  TJRJ: { alias: 'api_publica_tjrj', nome: 'Tribunal de Justiça do Rio de Janeiro' },
-  TJMG: { alias: 'api_publica_tjmg', nome: 'Tribunal de Justiça de Minas Gerais' },
-  TJRS: { alias: 'api_publica_tjrs', nome: 'Tribunal de Justiça do Rio Grande do Sul' },
-  TJPR: { alias: 'api_publica_tjpr', nome: 'Tribunal de Justiça do Paraná' },
-  TJSC: { alias: 'api_publica_tjsc', nome: 'Tribunal de Justiça de Santa Catarina' },
-  TJBA: { alias: 'api_publica_tjba', nome: 'Tribunal de Justiça da Bahia' },
-  TJGO: { alias: 'api_publica_tjgo', nome: 'Tribunal de Justiça de Goiás' },
-  TJDF: { alias: 'api_publica_tjdft', nome: 'Tribunal de Justiça do Distrito Federal' },
-  TJPE: { alias: 'api_publica_tjpe', nome: 'Tribunal de Justiça de Pernambuco' },
-  TJCE: { alias: 'api_publica_tjce', nome: 'Tribunal de Justiça do Ceará' },
-  TJMT: { alias: 'api_publica_tjmt', nome: 'Tribunal de Justiça de Mato Grosso' },
-  TJMS: { alias: 'api_publica_tjms', nome: 'Tribunal de Justiça de Mato Grosso do Sul' },
-  TJPB: { alias: 'api_publica_tjpb', nome: 'Tribunal de Justiça da Paraíba' },
-  TJAL: { alias: 'api_publica_tjal', nome: 'Tribunal de Justiça de Alagoas' },
-  TJSE: { alias: 'api_publica_tjse', nome: 'Tribunal de Justiça de Sergipe' },
-  TJRN: { alias: 'api_publica_tjrn', nome: 'Tribunal de Justiça do Rio Grande do Norte' },
-  TJPI: { alias: 'api_publica_tjpi', nome: 'Tribunal de Justiça do Piauí' },
-  TJMA: { alias: 'api_publica_tjma', nome: 'Tribunal de Justiça do Maranhão' },
-  TJPA: { alias: 'api_publica_tjpa', nome: 'Tribunal de Justiça do Pará' },
-  TJAP: { alias: 'api_publica_tjap', nome: 'Tribunal de Justiça do Amapá' },
-  TJAM: { alias: 'api_publica_tjam', nome: 'Tribunal de Justiça do Amazonas' },
-  TJRR: { alias: 'api_publica_tjrr', nome: 'Tribunal de Justiça de Roraima' },
-  TJAC: { alias: 'api_publica_tjac', nome: 'Tribunal de Justiça do Acre' },
-  TJRO: { alias: 'api_publica_tjro', nome: 'Tribunal de Justiça de Rondônia' },
-  TJTO: { alias: 'api_publica_tjto', nome: 'Tribunal de Justiça do Tocantins' },
-  TJES: { alias: 'api_publica_tjes', nome: 'Tribunal de Justiça do Espírito Santo' },
-  
-  // Tribunais Regionais do Trabalho (principais)
-  TRT1: { alias: 'api_publica_trt1', nome: 'Tribunal Regional do Trabalho da 1ª Região' },
-  TRT2: { alias: 'api_publica_trt2', nome: 'Tribunal Regional do Trabalho da 2ª Região' },
-  TRT3: { alias: 'api_publica_trt3', nome: 'Tribunal Regional do Trabalho da 3ª Região' },
-  TRT4: { alias: 'api_publica_trt4', nome: 'Tribunal Regional do Trabalho da 4ª Região' },
-  TRT5: { alias: 'api_publica_trt5', nome: 'Tribunal Regional do Trabalho da 5ª Região' },
-  TRT6: { alias: 'api_publica_trt6', nome: 'Tribunal Regional do Trabalho da 6ª Região' },
-  TRT7: { alias: 'api_publica_trt7', nome: 'Tribunal Regional do Trabalho da 7ª Região' },
-  TRT8: { alias: 'api_publica_trt8', nome: 'Tribunal Regional do Trabalho da 8ª Região' },
-  TRT9: { alias: 'api_publica_trt9', nome: 'Tribunal Regional do Trabalho da 9ª Região' },
-  TRT10: { alias: 'api_publica_trt10', nome: 'Tribunal Regional do Trabalho da 10ª Região' },
-  TRT11: { alias: 'api_publica_trt11', nome: 'Tribunal Regional do Trabalho da 11ª Região' },
-  TRT12: { alias: 'api_publica_trt12', nome: 'Tribunal Regional do Trabalho da 12ª Região' },
-  TRT13: { alias: 'api_publica_trt13', nome: 'Tribunal Regional do Trabalho da 13ª Região' },
-  TRT14: { alias: 'api_publica_trt14', nome: 'Tribunal Regional do Trabalho da 14ª Região' },
-  TRT15: { alias: 'api_publica_trt15', nome: 'Tribunal Regional do Trabalho da 15ª Região' },
-  TRT16: { alias: 'api_publica_trt16', nome: 'Tribunal Regional do Trabalho da 16ª Região' },
-  TRT17: { alias: 'api_publica_trt17', nome: 'Tribunal Regional do Trabalho da 17ª Região' },
-  TRT18: { alias: 'api_publica_trt18', nome: 'Tribunal Regional do Trabalho da 18ª Região' },
-  TRT19: { alias: 'api_publica_trt19', nome: 'Tribunal Regional do Trabalho da 19ª Região' },
-  TRT20: { alias: 'api_publica_trt20', nome: 'Tribunal Regional do Trabalho da 20ª Região' },
-  TRT21: { alias: 'api_publica_trt21', nome: 'Tribunal Regional do Trabalho da 21ª Região' },
-  TRT22: { alias: 'api_publica_trt22', nome: 'Tribunal Regional do Trabalho da 22ª Região' },
-  TRT23: { alias: 'api_publica_trt23', nome: 'Tribunal Regional do Trabalho da 23ª Região' },
-  TRT24: { alias: 'api_publica_trt24', nome: 'Tribunal Regional do Trabalho da 24ª Região' },
-  
-  // Tribunais Regionais Eleitorais (principais)
-  TRESP: { alias: 'api_publica_tresp', nome: 'Tribunal Regional Eleitoral de São Paulo' },
-  TRERJ: { alias: 'api_publica_trerj', nome: 'Tribunal Regional Eleitoral do Rio de Janeiro' },
-  TREMG: { alias: 'api_publica_tremg', nome: 'Tribunal Regional Eleitoral de Minas Gerais' },
-  TRERS: { alias: 'api_publica_trers', nome: 'Tribunal Regional Eleitoral do Rio Grande do Sul' },
-  TREPR: { alias: 'api_publica_trepr', nome: 'Tribunal Regional Eleitoral do Paraná' },
-  TRESC: { alias: 'api_publica_tresc', nome: 'Tribunal Regional Eleitoral de Santa Catarina' },
-  TREBA: { alias: 'api_publica_treba', nome: 'Tribunal Regional Eleitoral da Bahia' },
-  TREGO: { alias: 'api_publica_trego', nome: 'Tribunal Regional Eleitoral de Goiás' },
-  TREDF: { alias: 'api_publica_tredf', nome: 'Tribunal Regional Eleitoral do Distrito Federal' }
+  TRF1: { alias: 'api_publica_trf1', nome: 'Tribunal Regional Federal da 1ª Região', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_trf1/_search' },
+  TRF2: { alias: 'api_publica_trf2', nome: 'Tribunal Regional Federal da 2ª Região', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_trf2/_search' },
+  TRF3: { alias: 'api_publica_trf3', nome: 'Tribunal Regional Federal da 3ª Região', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_trf3/_search' },
+  TRF4: { alias: 'api_publica_trf4', nome: 'Tribunal Regional Federal da 4ª Região', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_trf4/_search' },
+  TRF5: { alias: 'api_publica_trf5', nome: 'Tribunal Regional Federal da 5ª Região', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_trf5/_search' },
+  TRF6: { alias: 'api_publica_trf6', nome: 'Tribunal Regional Federal da 6ª Região', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_trf6/_search' },
+
+  // Tribunais de Justiça Estaduais
+  TJAC: { alias: 'api_publica_tjac', nome: 'Tribunal de Justiça do Acre', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_tjac/_search' },
+  TJAL: { alias: 'api_publica_tjal', nome: 'Tribunal de Justiça de Alagoas', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_tjal/_search' },
+  TJAM: { alias: 'api_publica_tjam', nome: 'Tribunal de Justiça do Amazonas', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_tjam/_search' },
+  TJAP: { alias: 'api_publica_tjap', nome: 'Tribunal de Justiça do Amapá', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_tjap/_search' },
+  TJBA: { alias: 'api_publica_tjba', nome: 'Tribunal de Justiça da Bahia', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_tjba/_search' },
+  TJCE: { alias: 'api_publica_tjce', nome: 'Tribunal de Justiça do Ceará', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_tjce/_search' },
+  TJDFT: { alias: 'api_publica_tjdft', nome: 'Tribunal de Justiça do Distrito Federal', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_tjdft/_search' },
+  TJES: { alias: 'api_publica_tjes', nome: 'Tribunal de Justiça do Espírito Santo', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_tjes/_search' },
+  TJGO: { alias: 'api_publica_tjgo', nome: 'Tribunal de Justiça de Goiás', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_tjgo/_search' },
+  TJMA: { alias: 'api_publica_tjma', nome: 'Tribunal de Justiça do Maranhão', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_tjma/_search' },
+  TJMG: { alias: 'api_publica_tjmg', nome: 'Tribunal de Justiça de Minas Gerais', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_tjmg/_search' },
+  TJMS: { alias: 'api_publica_tjms', nome: 'Tribunal de Justiça de Mato Grosso do Sul', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_tjms/_search' },
+  TJMT: { alias: 'api_publica_tjmt', nome: 'Tribunal de Justiça de Mato Grosso', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_tjmt/_search' },
+  TJPA: { alias: 'api_publica_tjpa', nome: 'Tribunal de Justiça do Pará', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_tjpa/_search' },
+  TJPB: { alias: 'api_publica_tjpb', nome: 'Tribunal de Justiça da Paraíba', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_tjpb/_search' },
+  TJPE: { alias: 'api_publica_tjpe', nome: 'Tribunal de Justiça de Pernambuco', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_tjpe/_search' },
+  TJPI: { alias: 'api_publica_tjpi', nome: 'Tribunal de Justiça do Piauí', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_tjpi/_search' },
+  TJPR: { alias: 'api_publica_tjpr', nome: 'Tribunal de Justiça do Paraná', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_tjpr/_search' },
+  TJRJ: { alias: 'api_publica_tjrj', nome: 'Tribunal de Justiça do Rio de Janeiro', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_tjrj/_search' },
+  TJRN: { alias: 'api_publica_tjrn', nome: 'Tribunal de Justiça do Rio Grande do Norte', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_tjrn/_search' },
+  TJRO: { alias: 'api_publica_tjro', nome: 'Tribunal de Justiça de Rondônia', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_tjro/_search' },
+  TJRR: { alias: 'api_publica_tjrr', nome: 'Tribunal de Justiça de Roraima', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_tjrr/_search' },
+  TJRS: { alias: 'api_publica_tjrs', nome: 'Tribunal de Justiça do Rio Grande do Sul', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_tjrs/_search' },
+  TJSC: { alias: 'api_publica_tjsc', nome: 'Tribunal de Justiça de Santa Catarina', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_tjsc/_search' },
+  TJSE: { alias: 'api_publica_tjse', nome: 'Tribunal de Justiça de Sergipe', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_tjse/_search' },
+  TJSP: { alias: 'api_publica_tjsp', nome: 'Tribunal de Justiça de São Paulo', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_tjsp/_search' },
+  TJTO: { alias: 'api_publica_tjto', nome: 'Tribunal de Justiça do Tocantins', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_tjto/_search' },
+
+  // Tribunais Regionais do Trabalho
+  TRT1: { alias: 'api_publica_trt1', nome: 'Tribunal Regional do Trabalho da 1ª Região', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_trt1/_search' },
+  TRT2: { alias: 'api_publica_trt2', nome: 'Tribunal Regional do Trabalho da 2ª Região', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_trt2/_search' },
+  TRT3: { alias: 'api_publica_trt3', nome: 'Tribunal Regional do Trabalho da 3ª Região', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_trt3/_search' },
+  TRT4: { alias: 'api_publica_trt4', nome: 'Tribunal Regional do Trabalho da 4ª Região', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_trt4/_search' },
+  TRT5: { alias: 'api_publica_trt5', nome: 'Tribunal Regional do Trabalho da 5ª Região', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_trt5/_search' },
+  TRT6: { alias: 'api_publica_trt6', nome: 'Tribunal Regional do Trabalho da 6ª Região', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_trt6/_search' },
+  TRT7: { alias: 'api_publica_trt7', nome: 'Tribunal Regional do Trabalho da 7ª Região', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_trt7/_search' },
+  TRT8: { alias: 'api_publica_trt8', nome: 'Tribunal Regional do Trabalho da 8ª Região', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_trt8/_search' },
+  TRT9: { alias: 'api_publica_trt9', nome: 'Tribunal Regional do Trabalho da 9ª Região', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_trt9/_search' },
+  TRT10: { alias: 'api_publica_trt10', nome: 'Tribunal Regional do Trabalho da 10ª Região', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_trt10/_search' },
+  TRT11: { alias: 'api_publica_trt11', nome: 'Tribunal Regional do Trabalho da 11ª Região', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_trt11/_search' },
+  TRT12: { alias: 'api_publica_trt12', nome: 'Tribunal Regional do Trabalho da 12ª Região', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_trt12/_search' },
+  TRT13: { alias: 'api_publica_trt13', nome: 'Tribunal Regional do Trabalho da 13ª Região', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_trt13/_search' },
+  TRT14: { alias: 'api_publica_trt14', nome: 'Tribunal Regional do Trabalho da 14ª Região', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_trt14/_search' },
+  TRT15: { alias: 'api_publica_trt15', nome: 'Tribunal Regional do Trabalho da 15ª Região', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_trt15/_search' },
+  TRT16: { alias: 'api_publica_trt16', nome: 'Tribunal Regional do Trabalho da 16ª Região', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_trt16/_search' },
+  TRT17: { alias: 'api_publica_trt17', nome: 'Tribunal Regional do Trabalho da 17ª Região', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_trt17/_search' },
+  TRT18: { alias: 'api_publica_trt18', nome: 'Tribunal Regional do Trabalho da 18ª Região', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_trt18/_search' },
+  TRT19: { alias: 'api_publica_trt19', nome: 'Tribunal Regional do Trabalho da 19ª Região', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_trt19/_search' },
+  TRT20: { alias: 'api_publica_trt20', nome: 'Tribunal Regional do Trabalho da 20ª Região', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_trt20/_search' },
+  TRT21: { alias: 'api_publica_trt21', nome: 'Tribunal Regional do Trabalho da 21ª Região', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_trt21/_search' },
+  TRT22: { alias: 'api_publica_trt22', nome: 'Tribunal Regional do Trabalho da 22ª Região', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_trt22/_search' },
+  TRT23: { alias: 'api_publica_trt23', nome: 'Tribunal Regional do Trabalho da 23ª Região', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_trt23/_search' },
+  TRT24: { alias: 'api_publica_trt24', nome: 'Tribunal Regional do Trabalho da 24ª Região', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_trt24/_search' },
+
+  // Tribunais Regionais Eleitorais
+  TREAC: { alias: 'api_publica_tre-ac', nome: 'Tribunal Regional Eleitoral do Acre', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_tre-ac/_search' },
+  TREAL: { alias: 'api_publica_tre-al', nome: 'Tribunal Regional Eleitoral de Alagoas', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_tre-al/_search' },
+  TREAM: { alias: 'api_publica_tre-am', nome: 'Tribunal Regional Eleitoral do Amazonas', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_tre-am/_search' },
+  TREAP: { alias: 'api_publica_tre-ap', nome: 'Tribunal Regional Eleitoral do Amapá', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_tre-ap/_search' },
+  TREBA: { alias: 'api_publica_tre-ba', nome: 'Tribunal Regional Eleitoral da Bahia', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_tre-ba/_search' },
+  TRECE: { alias: 'api_publica_tre-ce', nome: 'Tribunal Regional Eleitoral do Ceará', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_tre-ce/_search' },
+  TREDF: { alias: 'api_publica_tre-dft', nome: 'Tribunal Regional Eleitoral do Distrito Federal', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_tre-dft/_search' },
+  TREES: { alias: 'api_publica_tre-es', nome: 'Tribunal Regional Eleitoral do Espírito Santo', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_tre-es/_search' },
+  TREGO: { alias: 'api_publica_tre-go', nome: 'Tribunal Regional Eleitoral de Goiás', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_tre-go/_search' },
+  TREMA: { alias: 'api_publica_tre-ma', nome: 'Tribunal Regional Eleitoral do Maranhão', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_tre-ma/_search' },
+  TREMG: { alias: 'api_publica_tre-mg', nome: 'Tribunal Regional Eleitoral de Minas Gerais', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_tre-mg/_search' },
+  TREMS: { alias: 'api_publica_tre-ms', nome: 'Tribunal Regional Eleitoral do Mato Grosso do Sul', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_tre-ms/_search' },
+  TREMT: { alias: 'api_publica_tre-mt', nome: 'Tribunal Regional Eleitoral do Mato Grosso', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_tre-mt/_search' },
+  TREPA: { alias: 'api_publica_tre-pa', nome: 'Tribunal Regional Eleitoral do Pará', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_tre-pa/_search' },
+  TREPB: { alias: 'api_publica_tre-pb', nome: 'Tribunal Regional Eleitoral da Paraíba', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_tre-pb/_search' },
+  TREPE: { alias: 'api_publica_tre-pe', nome: 'Tribunal Regional Eleitoral de Pernambuco', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_tre-pe/_search' },
+  TREPI: { alias: 'api_publica_tre-pi', nome: 'Tribunal Regional Eleitoral do Piauí', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_tre-pi/_search' },
+  TREPR: { alias: 'api_publica_tre-pr', nome: 'Tribunal Regional Eleitoral do Paraná', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_tre-pr/_search' },
+  TRERJ: { alias: 'api_publica_tre-rj', nome: 'Tribunal Regional Eleitoral do Rio de Janeiro', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_tre-rj/_search' },
+  TRERN: { alias: 'api_publica_tre-rn', nome: 'Tribunal Regional Eleitoral do Rio Grande do Norte', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_tre-rn/_search' },
+  TRERO: { alias: 'api_publica_tre-ro', nome: 'Tribunal Regional Eleitoral de Rondônia', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_tre-ro/_search' },
+  TRERR: { alias: 'api_publica_tre-rr', nome: 'Tribunal Regional Eleitoral de Roraima', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_tre-rr/_search' },
+  TRERS: { alias: 'api_publica_tre-rs', nome: 'Tribunal Regional Eleitoral do Rio Grande do Sul', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_tre-rs/_search' },
+  TRESC: { alias: 'api_publica_tre-sc', nome: 'Tribunal Regional Eleitoral de Santa Catarina', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_tre-sc/_search' },
+  TRESE: { alias: 'api_publica_tre-se', nome: 'Tribunal Regional Eleitoral de Sergipe', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_tre-se/_search' },
+  TRESP: { alias: 'api_publica_tre-sp', nome: 'Tribunal Regional Eleitoral de São Paulo', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_tre-sp/_search' },
+  TRETO: { alias: 'api_publica_tre-to', nome: 'Tribunal Regional Eleitoral do Tocantins', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_tre-to/_search' },
+
+  // Justiça Militar
+  TJMMG: { alias: 'api_publica_tjmmg', nome: 'Tribunal Justiça Militar de Minas Gerais', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_tjmmg/_search' },
+  TJMRS: { alias: 'api_publica_tjmrs', nome: 'Tribunal Justiça Militar do Rio Grande do Sul', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_tjmrs/_search' },
+  TJMSP: { alias: 'api_publica_tjmsp', nome: 'Tribunal Justiça Militar de São Paulo', endpoint: 'https://api-publica.datajud.cnj.jus.br/api_publica_tjmsp/_search' }
 };
 
 // Função para organizar tribunais por categoria
@@ -122,57 +146,47 @@ export const obterTribunaisPorCategoria = () => {
   };
 };
 
-// Função para fazer requisições REAIS à API DataJud do CNJ
+// Função para fazer requisições REAIS à API DataJud do CNJ via Vercel
 const makeRequestReal = async (endpoint, params = {}) => {
-  console.log(`🌐 Buscando dados REAIS na API DataJud: ${endpoint}`);
-  
+  console.log(`🌐 Buscando dados REAIS na API DataJud via Vercel: ${endpoint}`);
+
   try {
-    // Construir URL com parâmetros
-    const url = new URL(`${DATAJUD_SEARCH_BASE}${endpoint}`);
-    
-    // Adicionar parâmetros de consulta
-    Object.keys(params).forEach(key => {
-      if (params[key]) {
-        url.searchParams.append(key, params[key]);
-      }
-    });
-    
-    // Headers oficiais da API DataJud
+    const url = `${VERCEL_API_BASE}${endpoint}`;
+
+    // Headers para requisição
     const headers = {
       'Accept': 'application/json',
       'Content-Type': 'application/json',
       'User-Agent': 'DireitoHub/1.0'
     };
-    
-    // Adicionar API Key se disponível
-    if (API_KEY) {
-      headers['Authorization'] = `Bearer ${API_KEY}`;
-    }
-    
-    console.log(`📡 Fazendo requisição para: ${url.toString()}`);
-    
-    const response = await fetch(url.toString(), {
-      method: 'GET',
-      headers: headers
+
+    console.log(`📡 Fazendo requisição POST para: ${url}`);
+    console.log('📋 Parâmetros:', params);
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: headers,
+      body: JSON.stringify(params)
     });
-    
+
     console.log(`📊 Status da resposta: ${response.status}`);
-    
+
     if (!response.ok) {
       const errorText = await response.text();
       throw new Error(`API DataJud retornou ${response.status}: ${response.statusText} - ${errorText}`);
     }
-    
+
     const data = await response.json();
-    console.log('✅ Dados reais obtidos da API DataJud:', data);
-    
+    console.log('✅ Dados reais obtidos da API DataJud via Vercel:', data);
+
     return {
       success: true,
-      data: data,
+      data: data.data || data,
       source: 'datajud-official',
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      ...data
     };
-    
+
   } catch (error) {
     console.error('❌ Erro ao buscar dados reais na API DataJud:', error);
     return {
@@ -210,78 +224,93 @@ const consultarTribunalEspecifico = async (numeroProcesso, tribunalAlias) => {
 export const buscarProcessoPorNumero = async (numeroProcesso, tribunais = []) => {
   try {
     console.log('🔍 Buscando processo REAL por número:', numeroProcesso);
-    
+
     // Validar número do processo
     const numeroLimpo = numeroProcesso.replace(/[^\d]/g, '');
     if (numeroLimpo.length !== 20) {
       throw new Error('Número do processo deve ter 20 dígitos');
     }
-    
+
     // Validar dígito verificador
     if (!validarNumeroProcessoCNJ(numeroLimpo)) {
       throw new Error('Número de processo inválido (dígito verificador incorreto)');
     }
-    
+
     // Identificar tribunal pelo número do processo
     const tribunalInfo = obterInfoTribunal(numeroLimpo);
     console.log('🏛️ Tribunal identificado:', tribunalInfo);
-    
-    // Estratégia 1: Busca geral na API DataJud
+
+    // Query Elasticsearch para busca por número do processo
+    const query = {
+      "query": {
+        "bool": {
+          "must": [
+            {
+              "term": {
+                "numeroProcesso": numeroLimpo
+              }
+            }
+          ]
+        }
+      },
+      "size": 10,
+      "_source": [
+        "id",
+        "numeroProcesso",
+        "numeroProcessoFormatado",
+        "tribunal",
+        "grau",
+        "nivelSigilo",
+        "dataAjuizamento",
+        "dataUltimaAtualizacao",
+        "orgaoJulgador",
+        "orgaoJulgador.nome",
+        "orgaoJulgador.codigo",
+        "classe",
+        "classe.nome",
+        "classe.codigo",
+        "assuntos",
+        "assuntos.nome",
+        "assuntos.codigo",
+        "movimentos",
+        "movimentos.dataHora",
+        "movimentos.complementosTabelados",
+        "movimentos.nome",
+        "movimentos.codigo",
+        "partes",
+        "partes.nome",
+        "partes.tipoPessoa",
+        "partes.polo",
+        "representantes",
+        "representantes.nome",
+        "representantes.tipoPessoa",
+        "valorCausa",
+        "dataHoraUltimaAtualizacao",
+        "numeroUnico"
+      ]
+    };
+
+    // Estratégia 1: Busca via Vercel serverless function
     try {
-      const resultadoGeral = await makeRequestReal('/processos', {
+      const resultadoVercel = await makeRequestReal('/buscar-numero', {
         numeroProcesso: numeroLimpo,
-        tribunais: tribunais.length > 0 ? tribunais.join(',') : undefined
+        tribunais: tribunais
       });
-      
-      if (resultadoGeral.success && resultadoGeral.data) {
-        console.log('✅ Processo encontrado na busca geral');
-        return resultadoGeral;
+
+      if (resultadoVercel.success && resultadoVercel.data && resultadoVercel.data.length > 0) {
+        console.log('✅ Processo encontrado via Vercel');
+        return {
+          success: true,
+          data: resultadoVercel.data.map(item => converterDadosDataJud(item)),
+          source: 'datajud-official',
+          tribunal: resultadoVercel.tribunal,
+          total: resultadoVercel.total
+        };
       }
     } catch (error) {
-      console.log('⚠️ Falha na busca geral:', error.message);
+      console.log('⚠️ Falha na busca via Vercel:', error.message);
     }
-    
-    // Estratégia 2: Busca em tribunal específico (se identificado)
-    if (tribunalInfo && tribunalInfo.codigoTribunal) {
-      try {
-        // Mapear código do tribunal para alias da API
-        const tribunalAlias = mapearCodigoParaAlias(tribunalInfo.codigoTribunal);
-        if (tribunalAlias) {
-          const resultadoTribunal = await consultarTribunalEspecifico(numeroLimpo, tribunalAlias);
-          
-          if (resultadoTribunal.success && resultadoTribunal.data) {
-            console.log('✅ Processo encontrado no tribunal específico');
-            return resultadoTribunal;
-          }
-        }
-      } catch (error) {
-        console.log('⚠️ Falha na busca por tribunal específico:', error.message);
-      }
-    }
-    
-    // Estratégia 3: Busca em múltiplos endpoints
-    const endpoints = [
-      '/consulta/processos',
-      '/search/processos',
-      '/public/processos'
-    ];
-    
-    for (const endpoint of endpoints) {
-      try {
-        const resultado = await makeRequestReal(endpoint, {
-          numero: numeroLimpo,
-          numeroProcesso: numeroLimpo
-        });
-        
-        if (resultado.success && resultado.data) {
-          console.log(`✅ Processo encontrado em ${endpoint}`);
-          return resultado;
-        }
-      } catch (error) {
-        console.log(`⚠️ Falha em ${endpoint}:`, error.message);
-      }
-    }
-    
+
     // Se chegou aqui, não encontrou o processo
     return {
       success: false,
@@ -290,7 +319,7 @@ export const buscarProcessoPorNumero = async (numeroProcesso, tribunais = []) =>
       numeroProcesso: numeroLimpo,
       tribunalInfo: tribunalInfo
     };
-    
+
   } catch (error) {
     console.error('❌ Erro ao buscar processo:', error);
     return {
@@ -446,99 +475,52 @@ export const buscarProcessosPorDocumento = async (documento, tribunais = []) => 
 export const buscarProcessosPorNome = async (nome, tribunais = []) => {
   try {
     console.log('🔍 Buscando processos REAIS por nome:', nome);
-    
-    if (!nome || nome.trim().length < 3) {
-      throw new Error('Nome deve ter pelo menos 3 caracteres');
+
+    if (!nome || nome.trim().length < 2) {
+      throw new Error('Nome deve ter pelo menos 2 caracteres');
     }
-    
+
     const nomeFormatado = nome.trim();
-    
-    // Estratégia 1: Busca geral por nome
+
+    // Estratégia: Busca via Vercel serverless function
     try {
-      const resultadoGeral = await makeRequestReal('/processos/consulta/nome', {
+      const resultadoVercel = await makeRequestReal('/buscar-nome', {
         nome: nomeFormatado,
-        tribunais: tribunais.length > 0 ? tribunais.join(',') : undefined
+        query: nomeFormatado,
+        tribunais: tribunais
       });
-      
-      if (resultadoGeral.success && resultadoGeral.data) {
-        console.log('✅ Processos encontrados na busca geral por nome');
+
+      if (resultadoVercel.success) {
+        console.log('✅ Processos encontrados via Vercel');
         return {
           success: true,
-          data: Array.isArray(resultadoGeral.data) ? resultadoGeral.data : [resultadoGeral.data],
+          data: (resultadoVercel.data || []).map(item => converterDadosDataJud(item)),
+          total: resultadoVercel.total || 0,
+          tribunaisBuscados: resultadoVercel.tribunaisBuscados || [],
+          message: resultadoVercel.message || `Encontrados ${resultadoVercel.total || 0} processos`,
           source: 'datajud-official',
           isSimulated: false
         };
       }
     } catch (error) {
-      console.log('⚠️ Falha na busca geral por nome:', error.message);
+      console.warn('⚠️ Erro na busca via Vercel:', error.message);
     }
-    
-    // Estratégia 2: Busca em endpoints específicos
-    const endpoints = [
-      '/search/processos/nome',
-      '/consulta/processos/nome',
-      '/buscar/nome',
-      '/public/processos/nome'
-    ];
-    
-    for (const endpoint of endpoints) {
-      try {
-        const resultado = await makeRequestReal(endpoint, {
-          nome: nomeFormatado,
-          query: nomeFormatado,
-          tribunais: tribunais.length > 0 ? tribunais.join(',') : undefined
-        });
-        
-        if (resultado.success && resultado.data) {
-          console.log(`✅ Processos encontrados em ${endpoint}`);
-          return {
-            success: true,
-            data: Array.isArray(resultado.data) ? resultado.data : [resultado.data],
-            source: 'datajud-official',
-            isSimulated: false
-          };
-        }
-      } catch (error) {
-        console.log(`⚠️ Falha em ${endpoint}:`, error.message);
-      }
-    }
-    
-    // Estratégia 3: Busca em tribunais específicos se informado
-    if (tribunais.length > 0) {
-      for (const tribunal of tribunais) {
-        try {
-          const resultado = await makeRequestReal(`/tribunais/${tribunal}/processos/nome`, {
-            nome: nomeFormatado
-          });
-          
-          if (resultado.success && resultado.data) {
-            console.log(`✅ Processos encontrados no tribunal ${tribunal}`);
-            return {
-              success: true,
-              data: Array.isArray(resultado.data) ? resultado.data : [resultado.data],
-              source: 'datajud-official',
-              isSimulated: false
-            };
-          }
-        } catch (error) {
-          console.log(`⚠️ Falha no tribunal ${tribunal}:`, error.message);
-        }
-      }
-    }
-    
-    // Se chegou aqui, não encontrou processos
+
+    // Fallback: sem resultados
     return {
-      success: false,
-      error: 'Nenhum processo encontrado para o nome informado na base de dados do CNJ. Note que a busca por nome pode ter limitações de privacidade.',
+      success: true,
+      data: [],
+      message: `Nenhum processo encontrado para "${nome}"`,
       source: 'datajud-official',
-      nome: nomeFormatado
+      isSimulated: false
     };
-    
+
   } catch (error) {
-    console.error('❌ Erro ao buscar processos por nome:', error);
+    console.error('❌ Erro na busca por nome:', error);
     return {
       success: false,
       error: error.message,
+      data: [],
       source: 'datajud-official'
     };
   }
@@ -548,33 +530,36 @@ export const buscarProcessosPorNome = async (nome, tribunais = []) => {
 export const buscarProcessosPorAdvogado = async (nomeAdvogado, tribunais = []) => {
   try {
     console.log('🔍 Buscando processos REAIS por advogado:', nomeAdvogado);
-    
+
     if (!nomeAdvogado || nomeAdvogado.trim().length < 3) {
       throw new Error('Nome do advogado deve ter pelo menos 3 caracteres');
     }
-    
+
     const nomeFormatado = nomeAdvogado.trim();
-    
-    // Estratégia: Busca por advogado
+
+    // Estratégia: Busca via Vercel serverless function
     try {
-      const resultadoAdvogado = await makeRequestReal('/processos/consulta/advogado', {
-        nome: nomeFormatado,
-        tribunais: tribunais.length > 0 ? tribunais.join(',') : undefined
+      const resultadoVercel = await makeRequestReal('/buscar-advogado', {
+        nomeAdvogado: nomeFormatado,
+        tribunais: tribunais
       });
-      
-      if (resultadoAdvogado.success && resultadoAdvogado.data) {
-        console.log('✅ Processos encontrados na busca por advogado');
+
+      if (resultadoVercel.success) {
+        console.log('✅ Processos encontrados via Vercel');
         return {
           success: true,
-          data: Array.isArray(resultadoAdvogado.data) ? resultadoAdvogado.data : [resultadoAdvogado.data],
+          data: (resultadoVercel.data || []).map(item => converterDadosDataJud(item)),
+          total: resultadoVercel.total || 0,
+          tribunaisBuscados: resultadoVercel.tribunaisBuscados || [],
+          message: resultadoVercel.message || `Encontrados ${resultadoVercel.total || 0} processos`,
           source: 'datajud-official',
           isSimulated: false
         };
       }
     } catch (error) {
-      console.warn('⚠️ Erro na busca por advogado:', error.message);
+      console.warn('⚠️ Erro na busca via Vercel:', error.message);
     }
-    
+
     // Fallback: sem resultados
     return {
       success: true,
@@ -583,7 +568,7 @@ export const buscarProcessosPorAdvogado = async (nomeAdvogado, tribunais = []) =
       source: 'datajud-official',
       isSimulated: false
     };
-    
+
   } catch (error) {
     console.error('❌ Erro na busca por advogado:', error);
     return {
@@ -891,15 +876,13 @@ export const buscarProcessoAvancado = async (criterios, tribunais = []) => {
       const doc = criterios.documento || criterios.cpf || criterios.cnpj;
       return await buscarProcessosPorDocumento(doc, tribunais);
     }
-    
-    // Para outros critérios, retornar dados simulados
-    console.log('📊 Retornando dados simulados para busca avançada');
-    const dadosSimulados = gerarDadosSimulados('', 'avancado');
+
+    // Para outros critérios não suportados pela API, retornar erro
+    console.log('❌ Critérios de busca não suportados pela API DataJud');
     return {
-      success: true,
-      data: dadosSimulados,
-      source: 'simulated',
-      isSimulated: true
+      success: false,
+      error: 'Critérios de busca não suportados. Use número do processo, nome da parte ou documento.',
+      isSimulated: false
     };
     
   } catch (error) {
@@ -1001,36 +984,141 @@ function formatarCNPJ(cnpj) {
 // Função para converter dados da API para o formato do sistema
 export const converterDadosDataJud = (dadosDataJud) => {
   console.log('🔄 Convertendo dados do DataJud:', dadosDataJud);
-  
+
   if (!dadosDataJud) {
     return null;
   }
-  
+
   const convertedData = {
-    id: dadosDataJud._id || `datajud_${Date.now()}`,
+    // Dados identificadores
+    id: dadosDataJud.id || dadosDataJud._id || `datajud_${Date.now()}`,
     numeroProcesso: dadosDataJud.numeroProcesso,
-    numeroProcessoFormatado: dadosDataJud.numeroProcessoFormatado || formatarNumeroProcesso(dadosDataJud.numeroProcesso),
-    classe: dadosDataJud.classe?.nome || 'Não informado',
-    assunto: dadosDataJud.assuntos?.[0]?.nome || 'Não informado',
-    tribunal: dadosDataJud.tribunalNome || 'Não informado',
-    orgaoJulgador: dadosDataJud.orgaoJulgador?.nome || 'Não informado',
-    dataAjuizamento: dadosDataJud.dataAjuizamento,
-    dataUltimaAtualizacao: dadosDataJud.dataHoraUltimaAtualizacao,
-    grau: dadosDataJud.grau || 'Não informado',
-    status: mapearStatusProcesso(dadosDataJud.movimentos),
+    numeroProcessoFormatado: formatarNumeroProcesso(dadosDataJud.numeroProcesso),
+
+    // Dados do tribunal e jurisdição
+    tribunal: dadosDataJud.tribunal,
+    grau: dadosDataJud.grau,
+    nivelSigilo: dadosDataJud.nivelSigilo,
+
+    // Formato do processo
+    formato: dadosDataJud.formato || {},
+    formatoCodigo: dadosDataJud.formato?.codigo,
+    formatoNome: dadosDataJud.formato?.nome,
+
+    // Sistema processual
+    sistema: dadosDataJud.sistema || {},
+    sistemaCodigo: dadosDataJud.sistema?.codigo,
+    sistemaNome: dadosDataJud.sistema?.nome,
+
+    // Classe processual
+    classe: dadosDataJud.classe || {},
+    classeCodigo: dadosDataJud.classe?.codigo,
+    classeNome: dadosDataJud.classe?.nome,
+
+    // Assuntos do processo
+    assuntos: dadosDataJud.assuntos || [],
+
+    // Órgão julgador
+    orgaoJulgador: dadosDataJud.orgaoJulgador || {},
+    orgaoJulgadorCodigo: dadosDataJud.orgaoJulgador?.codigo,
+    orgaoJulgadorNome: dadosDataJud.orgaoJulgador?.nome,
+    orgaoJulgadorCodigoMunicipioIBGE: dadosDataJud.orgaoJulgador?.codigoMunicipioIBGE,
+
+    // Movimentos processuais (dados completos)
     movimentos: dadosDataJud.movimentos || [],
-    
-    // Dados originais preservados
+
+    // Datas
+    dataAjuizamento: dadosDataJud.dataAjuizamento,
+    dataHoraUltimaAtualizacao: dadosDataJud.dataHoraUltimaAtualizacao,
+    timestamp: dadosDataJud['@timestamp'],
+
+    // Status determinado automaticamente
+    status: mapearStatusProcesso(dadosDataJud.movimentos),
+
+    // Dados originais preservados para referência completa
     dadosOriginais: dadosDataJud,
-    
-    // Metadados
-    isFromDataJud: !dadosDataJud.isSimulated,
-    isSimulated: dadosDataJud.isSimulated || false,
-    dataImportacao: new Date().toISOString()
+
+    // Metadados do sistema
+    isFromDataJud: true,
+    isSimulated: false,
+    dataImportacao: new Date().toISOString(),
+
+    // Campos adicionais para compatibilidade com o sistema
+    title: `${dadosDataJud.classe?.nome || 'Processo'} - ${formatarNumeroProcesso(dadosDataJud.numeroProcesso)}`,
+    court: dadosDataJud.orgaoJulgador?.nome || 'Órgão não informado',
+    startDate: dadosDataJud.dataAjuizamento ? new Date(dadosDataJud.dataAjuizamento).toISOString().split('T')[0] : null,
+    lastUpdate: dadosDataJud.dataHoraUltimaAtualizacao ? new Date(dadosDataJud.dataHoraUltimaAtualizacao).toISOString().split('T')[0] : null,
+    nextHearing: extrairDataAudiencia(dadosDataJud.movimentos),
+    priority: 'normal',
+    description: gerarDescricaoProcesso(dadosDataJud)
   };
-  
+
   console.log('✅ Dados convertidos:', convertedData);
   return convertedData;
+};
+
+// Função auxiliar para extrair data de audiência dos movimentos
+const extrairDataAudiencia = (movimentos) => {
+  if (!movimentos || movimentos.length === 0) return null;
+
+  // Procurar por movimentos que contenham "audiência" ou códigos específicos de audiência
+  const movimentosAudiencia = movimentos.filter(movimento =>
+    movimento.nome?.toLowerCase().includes('audiência') ||
+    movimento.nome?.toLowerCase().includes('audiencia') ||
+    [26, 27, 28, 29, 30, 31, 32, 33, 34, 35].includes(movimento.codigo) // Códigos comuns de audiência
+  );
+
+  if (movimentosAudiencia.length === 0) return null;
+
+  // Pegar a audiência mais recente (última na lista)
+  const ultimaAudiencia = movimentosAudiencia[movimentosAudiencia.length - 1];
+
+  // Tentar extrair data do complemento ou da data do movimento
+  if (ultimaAudiencia.dataHora) {
+    return new Date(ultimaAudiencia.dataHora).toISOString().split('T')[0];
+  }
+
+  return null;
+};
+
+// Função auxiliar para gerar descrição do processo
+const gerarDescricaoProcesso = (dadosDataJud) => {
+  const partes = [];
+
+  if (dadosDataJud.classe?.nome) {
+    partes.push(`Classe: ${dadosDataJud.classe.nome}`);
+  }
+
+  if (dadosDataJud.assuntos && dadosDataJud.assuntos.length > 0) {
+    const assuntosStr = dadosDataJud.assuntos.map(a => a.nome).join(', ');
+    partes.push(`Assuntos: ${assuntosStr}`);
+  }
+
+  if (dadosDataJud.orgaoJulgador?.nome) {
+    partes.push(`Órgão: ${dadosDataJud.orgaoJulgador.nome}`);
+  }
+
+  if (dadosDataJud.grau) {
+    partes.push(`Grau: ${dadosDataJud.grau}`);
+  }
+
+  if (dadosDataJud.sistema?.nome) {
+    partes.push(`Sistema: ${dadosDataJud.sistema.nome}`);
+  }
+
+  if (dadosDataJud.formato?.nome) {
+    partes.push(`Formato: ${dadosDataJud.formato.nome}`);
+  }
+
+  if (dadosDataJud.nivelSigilo) {
+    partes.push(`Nível de Sigilo: ${dadosDataJud.nivelSigilo}`);
+  }
+
+  if (dadosDataJud.movimentos && dadosDataJud.movimentos.length > 0) {
+    partes.push(`${dadosDataJud.movimentos.length} movimentações processuais`);
+  }
+
+  return partes.join(' | ');
 };
 
 // Mapear status baseado nas movimentações

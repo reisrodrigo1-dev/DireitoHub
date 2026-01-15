@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { useNavigate } from 'react-router-dom';
 import UserCodeDisplay from './UserCodeDisplay';
 
 const Header = ({ onLoginClick, showBackButton = false, onBackClick }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const { user, userData, isAuthenticated, logout } = useAuth();
+  const navigate = useNavigate();
 
   const handleLogout = async () => {
     await logout();
@@ -76,6 +78,27 @@ const Header = ({ onLoginClick, showBackButton = false, onBackClick }) => {
                         Olá, {userData?.name || user?.displayName || 'Usuário'}
                       </span>
                     </div>
+                    {userData?.userType === 'advogado' && (
+                      <button
+                        onClick={() => navigate('/dashboard-advogado')}
+                        className="px-3 py-1 rounded-lg text-sm font-medium transition-colors"
+                        style={{
+                          border: '1px solid #001a7f',
+                          color: '#001a7f',
+                          backgroundColor: 'transparent'
+                        }}
+                        onMouseEnter={(e) => {
+                          e.target.style.backgroundColor = '#001a7f';
+                          e.target.style.color = 'white';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.target.style.backgroundColor = 'transparent';
+                          e.target.style.color = '#001a7f';
+                        }}
+                      >
+                        Dashboard
+                      </button>
+                    )}
                     <button
                       onClick={handleLogout}
                       className="px-3 py-1 rounded-lg text-sm font-medium transition-colors"
@@ -187,6 +210,17 @@ const Header = ({ onLoginClick, showBackButton = false, onBackClick }) => {
                           Olá, {userData?.name || user?.displayName || 'Usuário'}
                         </span>
                       </div>
+                      {userData?.userType === 'advogado' && (
+                        <button 
+                          onClick={() => {
+                            navigate('/dashboard-advogado');
+                            setIsMobileMenuOpen(false);
+                          }}
+                          className="w-full border border-blue-600 text-blue-600 px-4 py-2 rounded-lg font-medium hover:bg-blue-50 hover:border-blue-700 transition-colors text-sm"
+                        >
+                          Dashboard
+                        </button>
+                      )}
                       <button 
                         onClick={handleLogout}
                         className="w-full border border-gray-300 text-gray-700 px-4 py-2 rounded-lg font-medium hover:bg-gray-50 hover:border-gray-400 transition-colors text-sm"
