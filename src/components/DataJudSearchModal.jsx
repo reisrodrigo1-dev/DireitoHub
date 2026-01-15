@@ -100,13 +100,24 @@ const DataJudSearchModal = ({ isOpen, onClose, onSelectProcess }) => {
           break;
       }
 
-      setResults(searchResults);
+      console.log('🔍 Resultado bruto da busca:', searchResults);
+      
+      // Garantir que searchResults.data é um array
+      if (searchResults && searchResults.data && Array.isArray(searchResults.data)) {
+        console.log('✅ Resultados obtidos (estrutura com .data):', searchResults.data);
+        setResults(searchResults.data);
+      } else if (Array.isArray(searchResults)) {
+        console.log('✅ Resultados obtidos (array direto):', searchResults);
+        setResults(searchResults);
+      } else {
+        console.warn('⚠️ Formato de resultados inesperado:', searchResults);
+        setResults([]);
+      }
     } catch (error) {
       console.error('Erro na busca:', error);
       
       // Se não conseguir conectar com o backend, mostrar dados mockados para teste
       console.log('🔄 Usando dados mockados para demonstração...');
-      const mockData = [
         {
           _id: 'mock_processo_1',
           _score: 1.0,
@@ -655,7 +666,7 @@ const DataJudSearchModal = ({ isOpen, onClose, onSelectProcess }) => {
           {results.length > 0 && (
             <div className="mt-8">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                Resultados encontrados ({results.length})
+                ✅ Resultados encontrados ({results.length})
               </h3>
               <div className="space-y-4 max-h-96 overflow-y-auto">
                 {results.map((process, index) => (
