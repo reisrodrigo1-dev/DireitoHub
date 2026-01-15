@@ -1166,35 +1166,60 @@ const ProcessesScreen = () => {
               lastUpdate: new Date().toISOString().split('T')[0],
               
               // Preservar TODAS as informações do DataJud se existirem
-              ...(selectedProcess?.dataJudOriginal && {
+              ...(selectedProcess?.isFromDataJud && {
                 // Dados originais completos
-                dataJudOriginal: selectedProcess.dataJudOriginal,
+                dadosOriginais: selectedProcess.dadosOriginais,
                 
                 // Informações estruturadas
                 tribunal: selectedProcess.tribunal,
-                tribunalNome: selectedProcess.tribunalNome,
                 grau: selectedProcess.grau,
                 classe: selectedProcess.classe,
+                classeCompleta: selectedProcess.classeCompleta,
+                classeNome: selectedProcess.classeNome,
+                classeCodego: selectedProcess.classeCodigo,
+                
+                // Informações detalhadas
                 assuntos: selectedProcess.assuntos,
+                assuntosCompletos: selectedProcess.assuntosCompletos,
                 movimentos: selectedProcess.movimentos,
+                ultimosMovimentos: selectedProcess.ultimosMovimentos,
+                
+                // Órgão e sistema
                 orgaoJulgador: selectedProcess.orgaoJulgador,
-                sistema: selectedProcess.sistema,
-                formato: selectedProcess.formato,
-                nivelSigilo: selectedProcess.nivelSigilo,
+                orgaoJulgadorCompleto: selectedProcess.orgaoJulgadorCompleto,
+                orgaoJulgadorNome: selectedProcess.orgaoJulgadorNome,
+                orgaoJulgadorCodigo: selectedProcess.orgaoJulgadorCodigo,
+                
+                // Polos/Partes
+                partes: selectedProcess.partes,
+                polos: selectedProcess.polos,
+                representantes: selectedProcess.representantes,
+                
+                // Dados financeiros
+                valorCausa: selectedProcess.valorCausa,
                 
                 // Datas específicas
                 dataAjuizamento: selectedProcess.dataAjuizamento,
                 dataHoraUltimaAtualizacao: selectedProcess.dataHoraUltimaAtualizacao,
+                dataImportacao: selectedProcess.dataImportacao,
                 
-                // Dados técnicos
-                dataJudId: selectedProcess.dataJudId,
-                dataJudScore: selectedProcess.dataJudScore,
-                dataJudIndex: selectedProcess.dataJudIndex,
-                dataJudSource: selectedProcess.dataJudSource,
+                // Números e identificadores
+                numeroProcesso: selectedProcess.numeroProcesso,
+                numeroProcessoFormatado: selectedProcess.numeroProcessoFormatado,
+                numeroUnico: selectedProcess.numeroUnico,
+                numeroOrigem: selectedProcess.numeroOrigem,
+                
+                // Informações de sigilo
+                sigiloDados: selectedProcess.sigiloDados,
+                nivelSigilo: selectedProcess.nivelSigilo,
+                
+                // Resumo do processo
+                resumoProcesso: selectedProcess.resumoProcesso,
                 
                 // Metadados
                 isFromDataJud: true,
-                dataJudImportDate: selectedProcess.dataJudImportDate || new Date().toISOString()
+                isSimulated: selectedProcess.isSimulated || false,
+                dataImportacao: selectedProcess.dataImportacao || new Date().toISOString()
               })
             };
             
@@ -1202,49 +1227,21 @@ const ProcessesScreen = () => {
             
             try {
               if (user?.uid) {
-                // Verificar se é um processo existente no Firebase ou novo processo do DataJud
-                const existingProcess = processes.find(p => p.id === selectedProcess?.id);
-                const isExistingFirebaseProcess = existingProcess && existingProcess.createdAt; // Tem createdAt = já existe no Firebase
-                
-                // Para processos do DataJud, verificar se já foi salvo antes
-                if (selectedProcess?.isFromDataJud && selectedProcess?.dataJudId) {
-                  console.log('🔍 Verificando se processo do DataJud já foi salvo:', selectedProcess.dataJudId);
-                  
-                  // Verificar se já existe no Firebase
-                  const checkResult = await caseService.checkDataJudProcessExists(user.uid, selectedProcess.dataJudId);
-                  
-                  if (checkResult.success && checkResult.exists) {
+                // Verificar se é um processo do DataJud
+                if (selectedProcess?.isFromDataJud) {
+                  // Se tem ID, é para atualizar; caso contrário, criar novo
+                  if (selectedProcess?.id) {
                     // Processo do DataJud já existe no Firebase, atualizar
-                    console.log('📝 Atualizando processo do DataJud existente no Firebase:', checkResult.data.id);
-                    const result = await caseService.updateCase(checkResult.data.id, processToSave);
+                    console.log('📝 Atualizando processo do DataJud no Firebase:', selectedProcess.id);
+                    const result = await caseService.updateCase(selectedProcess.id, processToSave);
                     if (result.success) {
-                      const finalId = result.created ? result.id : checkResult.data.id;
-                      console.log('✅ Processo do DataJud atualizado no Firebase:', finalId);
+                      console.log('✅ Processo do DataJud atualizado no Firebase:', selectedProcess.id);
                       
                       // Recarregar processos do Firebase para garantir sincronização
                       await loadProcesses();
                       
                       setShowAddModal(false);
                       setSelectedProcess(null);
-                    } else {
-                      console.error('❌ Erro ao atualizar processo do DataJud:', result.error);
-                      alert('Erro ao atualizar processo. Tente novamente.');
-                      return;
-                    }
-                  } else if (selectedProcess?.id && existingProcess && existingProcess.createdAt) {
-                    // Processo existe na lista local E no Firebase (tem createdAt), atualizar
-                    console.log('📝 Atualizando processo do DataJud existente:', selectedProcess.id);
-                    const result = await caseService.updateCase(selectedProcess.id, processToSave);
-                    if (result.success) {
-                      console.log('✅ Processo do DataJud atualizado:', selectedProcess.id);
-                      setProcesses(processes.map(p => 
-                        p.id === selectedProcess.id ? { ...processToSave, id: selectedProcess.id } : p
-                      ));
-                      
-                      // Sincronizar automaticamente com calendário
-                      setTimeout(() => {
-                        syncSingleProcess({ ...processToSave, id: selectedProcess.id });
-                      }, 500);
                     } else {
                       console.error('❌ Erro ao atualizar processo do DataJud:', result.error);
                       alert('Erro ao atualizar processo. Tente novamente.');
@@ -1276,52 +1273,55 @@ const ProcessesScreen = () => {
                       return;
                     }
                   }
-                } else if (selectedProcess?.id && isExistingFirebaseProcess) {
-                  // Editando processo regular existente no Firebase
-                  console.log('📝 Atualizando processo regular existente no Firebase:', selectedProcess.id);
-                  const result = await caseService.updateCase(selectedProcess.id, processToSave);
-                  if (result.success) {
-                    console.log('✅ Processo regular atualizado:', selectedProcess.id);
-                    
-                    // Recarregar processos do Firebase para garantir sincronização
-                    await loadProcesses();
-                    
-                    setShowAddModal(false);
-                    setSelectedProcess(null);
-                    
-                    // Sincronizar automaticamente com calendário
-                    setTimeout(() => {
-                      syncSingleProcess({ ...processToSave, id: selectedProcess.id });
-                    }, 500);
-                  } else {
-                    console.error('❌ Erro ao atualizar processo regular:', result.error);
-                    alert('Erro ao atualizar processo. Tente novamente.');
-                    return;
-                  }
                 } else {
-                  // Adicionando novo processo regular
-                  console.log('➕ Criando novo processo regular');
-                  const result = await caseService.createCase(user.uid, processToSave);
-                  if (result.success) {
-                    console.log('✅ Processo regular criado:', result.id);
-                    
-                    // Recarregar processos do Firebase para garantir sincronização
-                    await loadProcesses();
-                    
-                    setShowAddModal(false);
-                    setSelectedProcess(null);
-                    
-                    // Adicionar ao calendário se tiver audiência
-                    const newProcess = { ...processToSave, id: result.id };
-                    setTimeout(() => {
-                      handleAutoAddToCalendar(newProcess);
+                  // Processo regular (não DataJud)
+                  if (selectedProcess?.id) {
+                    // Editando processo regular existente
+                    console.log('📝 Atualizando processo regular no Firebase:', selectedProcess.id);
+                    const result = await caseService.updateCase(selectedProcess.id, processToSave);
+                    if (result.success) {
+                      console.log('✅ Processo regular atualizado:', selectedProcess.id);
+                      
+                      // Recarregar processos do Firebase para garantir sincronização
+                      await loadProcesses();
+                      
+                      setShowAddModal(false);
+                      setSelectedProcess(null);
+                      
                       // Sincronizar automaticamente com calendário
-                      syncSingleProcess(newProcess);
-                    }, 500);
+                      setTimeout(() => {
+                        syncSingleProcess({ ...processToSave, id: selectedProcess.id });
+                      }, 500);
+                    } else {
+                      console.error('❌ Erro ao atualizar processo regular:', result.error);
+                      alert('Erro ao atualizar processo. Tente novamente.');
+                      return;
+                    }
                   } else {
-                    console.error('❌ Erro ao criar processo regular:', result.error);
-                    alert('Erro ao criar processo. Tente novamente.');
-                    return;
+                    // Criando novo processo regular
+                    console.log('➕ Criando novo processo regular');
+                    const result = await caseService.createCase(user.uid, processToSave);
+                    if (result.success) {
+                      console.log('✅ Processo regular criado:', result.id);
+                      
+                      // Recarregar processos do Firebase para garantir sincronização
+                      await loadProcesses();
+                      
+                      setShowAddModal(false);
+                      setSelectedProcess(null);
+                      
+                      // Adicionar ao calendário se tiver audiência
+                      const newProcess = { ...processToSave, id: result.id };
+                      setTimeout(() => {
+                        handleAutoAddToCalendar(newProcess);
+                        // Sincronizar automaticamente com calendário
+                        syncSingleProcess(newProcess);
+                      }, 500);
+                    } else {
+                      console.error('❌ Erro ao criar processo regular:', result.error);
+                      alert('Erro ao criar processo. Tente novamente.');
+                      return;
+                    }
                   }
                 }
               } else {
@@ -1452,13 +1452,13 @@ const ProcessesScreen = () => {
 // Componente Modal para Adicionar/Editar Processo
 const ProcessModal = ({ process, onClose, onSave }) => {
   const [formData, setFormData] = useState({
-    number: process?.number || '',
-    title: process?.title || '',
+    number: process?.number || process?.numeroProcessoFormatado || process?.numeroProcesso || '',
+    title: process?.title || process?.classeNome || process?.classeCompleta?.nome || '',
     client: process?.client || '',
-    court: process?.court || '',
+    court: process?.court || process?.orgaoJulgadorNome || process?.orgaoJulgadorCompleto?.nome || '',
     status: process?.status || 'Em andamento',
     priority: process?.priority || 'media',
-    startDate: process?.startDate || '',
+    startDate: process?.startDate || process?.dataAjuizamento || '',
     nextHearing: process?.nextHearing || '',
     description: process?.description || ''
   });
@@ -1467,10 +1467,23 @@ const ProcessModal = ({ process, onClose, onSave }) => {
 
   console.log('🔍 Modal ProcessModal - processo recebido:', process);
   console.log('🔍 Modal ProcessModal - isFromDataJud:', isFromDataJud);
+  console.log('🔍 Modal ProcessModal - formData.number:', formData.number);
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    onSave(formData);
+    // Se for DataJud, preservar todos os dados originais e apenas sobrescrever os editáveis
+    if (isFromDataJud && process) {
+      const dataToSave = {
+        ...process, // Manter todos os dados originais do DataJud
+        ...formData, // Sobrescrever apenas os campos editáveis
+        lastUpdate: new Date().toISOString().split('T')[0],
+        updatedAt: new Date()
+      };
+      console.log('💾 Salvando processo com dados DataJud preservados:', dataToSave);
+      onSave(dataToSave);
+    } else {
+      onSave(formData);
+    }
   };
 
   const handleChange = (e) => {
@@ -1479,6 +1492,23 @@ const ProcessModal = ({ process, onClose, onSave }) => {
       [e.target.name]: e.target.value
     });
   };
+
+  // Atualizar formData quando o processo mudar
+  useEffect(() => {
+    if (process) {
+      setFormData({
+        number: process?.number || process?.numeroProcessoFormatado || process?.numeroProcesso || '',
+        title: process?.title || process?.classeNome || process?.classeCompleta?.nome || '',
+        client: process?.client || '',
+        court: process?.court || process?.orgaoJulgadorNome || process?.orgaoJulgadorCompleto?.nome || '',
+        status: process?.status || 'Em andamento',
+        priority: process?.priority || 'media',
+        startDate: process?.startDate || process?.dataAjuizamento || '',
+        nextHearing: process?.nextHearing || '',
+        description: process?.description || ''
+      });
+    }
+  }, [process]);
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">

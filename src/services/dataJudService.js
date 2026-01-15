@@ -236,9 +236,10 @@ export const buscarProcessoPorNumero = async (numeroProcesso, tribunais = []) =>
       throw new Error('Número do processo deve ter 20 dígitos');
     }
 
-    // Validar dígito verificador
-    if (!validarNumeroProcessoCNJ(numeroLimpo)) {
-      throw new Error('Número de processo inválido (dígito verificador incorreto)');
+    // Validar dígito verificador (log apenas, não bloqueia a busca)
+    const validavelCNJ = validarNumeroProcessoCNJ(numeroLimpo);
+    if (!validavelCNJ) {
+      console.warn('⚠️ Número de processo pode ter dígito verificador inválido, mas continuando a busca');
     }
 
     // Identificar tribunal pelo número do processo

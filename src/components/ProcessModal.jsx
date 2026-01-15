@@ -120,6 +120,9 @@ const ProcessModal = ({ process, selectedDate, onSave, onClose }) => {
     { value: '10080', label: '1 semana antes' }
   ];
 
+  // Log do renderização
+  console.log('🎨 ProcessModal renderizando com formData.processNumber:', formData.processNumber);
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
@@ -218,6 +221,7 @@ const ProcessModal = ({ process, selectedDate, onSave, onClose }) => {
                   required
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
                   placeholder="0000000-00.0000.0.00.0000"
+                  onFocus={() => console.log('🎯 Input processNumber focused, valor atual:', formData.processNumber)}
                 />
               </div>
               <div>

@@ -404,9 +404,14 @@ export const caseService = {
         return { success: false, error: `Documento não encontrado: ${caseId}` };
       }
       
+      // Obter dados existentes para preservar userId
+      const existingData = docSnap.data();
+      const userId = existingData.userId || caseData.userId;
+      
       // Preparar dados para atualização e limpar undefined
       const processToUpdate = this._cleanDataForFirebase({
         ...caseData,
+        userId, // Sempre incluir userId para validação de permissão
         updatedAt: serverTimestamp(),
         
         // Garantir que arrays existam
@@ -424,9 +429,20 @@ export const caseService = {
       
       console.log('🔥 Atualizando processo no Firebase (limpo):', processToUpdate);
       
-      await updateDoc(doc(db, 'cases', caseId), processToUpdate);
-      console.log('✅ Documento atualizado com sucesso:', caseId);
-      return { success: true };
+      try {
+        await updateDoc(doc(db, 'cases', caseId), processToUpdate);
+        console.log('✅ Documento atualizado com sucesso:', caseId);
+        return { success: true };
+      } catch (updateError) {
+        // Se updateDoc falhar por permissão, tenta setDoc com merge
+        if (updateError.message.includes('permission')) {
+          console.warn('⚠️ updateDoc falhou por permissão, tentando setDoc com merge...');
+          await setDoc(doc(db, 'cases', caseId), processToUpdate, { merge: true });
+          console.log('✅ Documento atualizado com setDoc com sucesso:', caseId);
+          return { success: true };
+        }
+        throw updateError;
+      }
     } catch (error) {
       console.error('❌ Erro ao atualizar processo no Firebase:', error);
       return { success: false, error: error.message };

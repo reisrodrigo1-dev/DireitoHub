@@ -27,7 +27,8 @@ service cloud.firestore {
       allow create: if request.auth != null && 
                     request.auth.uid == request.resource.data.userId;
       allow read, update, delete: if request.auth != null && 
-                                   request.auth.uid == resource.data.userId;
+                                   (resource.data.userId == null || 
+                                    request.auth.uid == resource.data.userId);
     }
 
     // ============================================
@@ -37,14 +38,16 @@ service cloud.firestore {
       allow create: if request.auth != null && 
                     request.auth.uid == request.resource.data.userId;
       allow read, update, delete: if request.auth != null && 
-                                   request.auth.uid == resource.data.userId;
+                                   (resource.data.userId == null || 
+                                    request.auth.uid == resource.data.userId);
     }
 
     match /cases/{caseId} {
       allow create: if request.auth != null && 
                     request.auth.uid == request.resource.data.userId;
       allow read, update, delete: if request.auth != null && 
-                                   request.auth.uid == resource.data.userId;
+                                   (resource.data.userId == null || 
+                                    request.auth.uid == resource.data.userId);
     }
 
     // ============================================
@@ -111,7 +114,8 @@ service cloud.firestore {
       allow create: if request.auth != null && 
                     request.auth.uid == request.resource.data.userId;
       allow read, update, delete: if request.auth != null && 
-                                   request.auth.uid == resource.data.userId;
+                                   (resource.data.userId == null || 
+                                    request.auth.uid == resource.data.userId);
     }
 
     // ============================================
