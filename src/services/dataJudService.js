@@ -1075,6 +1075,22 @@ export const converterDadosDataJud = (dadosDataJud) => {
   console.log('🔄 Convertendo dados do DataJud:', dadosDataJud);
   console.log('📝 Partes no DataJud:', dadosDataJud?.partes);
   console.log('👨‍⚖️ Representantes no DataJud:', dadosDataJud?.representantes);
+  console.log('📋 TODAS as chaves do objeto DataJud original:');
+  console.table(Object.keys(dadosDataJud || {}));
+  
+  // Log detalhado de cada chave
+  if (dadosDataJud) {
+    Object.keys(dadosDataJud).forEach(chave => {
+      const valor = dadosDataJud[chave];
+      const tipo = Array.isArray(valor) ? `Array[${valor.length}]` : typeof valor;
+      console.log(`  ├─ ${chave}: ${tipo}`);
+      
+      // Se for array com dados, mostrar primeiro item
+      if (Array.isArray(valor) && valor.length > 0) {
+        console.log(`     └─ Primeiro item:`, valor[0]);
+      }
+    });
+  }
 
   if (!dadosDataJud) {
     return null;

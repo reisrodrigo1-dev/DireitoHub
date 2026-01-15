@@ -13,13 +13,21 @@
 export function mapearPolos(partes = [], representantes = []) {
   console.log('🗂️  Iniciando mapeamento de polos...');
   console.log('📊 Partes recebidas:', partes);
+  console.log('� Partes é array?', Array.isArray(partes), 'length:', partes?.length);
   console.log('👥 Representantes recebidos:', representantes);
+  console.log('👥 Representantes é array?', Array.isArray(representantes), 'length:', representantes?.length);
   
   const resultado = {
     autores: [],
     requeridos: [],
     advogados: []
   };
+
+  // Se ambos estão vazios, retornar early
+  if ((!partes || partes.length === 0) && (!representantes || representantes.length === 0)) {
+    console.log('⚠️ Nenhuma parte ou representante fornecido');
+    return resultado;
+  }
 
   // Validação: partes deve ser array
   if (!Array.isArray(partes)) {

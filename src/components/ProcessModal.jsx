@@ -22,10 +22,25 @@ const ProcessModal = ({ process, selectedDate, onSave, onClose }) => {
   useEffect(() => {
     if (process) {
       console.log('📋 Preenchendo formulário com processo:', process);
-      setFormData({
-        title: process.title || process.classeNome || '',
-        processNumber: process.processNumber || process.numeroProcesso || process.numeroProcessoFormatado || '',
-        court: process.court || process.orgaoJulgadorNome || '',
+      console.log('📝 Tentando preencher número do processo:');
+      console.log('  - process.processNumber:', process.processNumber);
+      console.log('  - process.numeroProcesso:', process.numeroProcesso);
+      console.log('  - process.numeroProcessoFormatado:', process.numeroProcessoFormatado);
+      console.log('  - process.resumoProcesso?.numeroFormatado:', process.resumoProcesso?.numeroFormatado);
+      
+      const numeroProcessoFinal = 
+        process.processNumber || 
+        process.numeroProcessoFormatado || 
+        process.numeroProcesso || 
+        process.resumoProcesso?.numeroFormatado ||
+        '';
+      
+      console.log('✅ Número final selecionado:', numeroProcessoFinal);
+      
+      const newFormData = {
+        title: process.title || process.classeNome || process.classeCompleta?.nome || '',
+        processNumber: numeroProcessoFinal,
+        court: process.court || process.orgaoJulgadorNome || process.orgaoJulgadorCompleto?.nome || '',
         description: process.description || '',
         date: process.date || process.startDate || '',
         time: process.time || '',
@@ -35,10 +50,15 @@ const ProcessModal = ({ process, selectedDate, onSave, onClose }) => {
         opposingParty: process.opposingParty || '',
         lawyer: process.lawyer || '',
         judge: process.judge || '',
-        subject: process.subject || process.classeNome || '',
+        subject: process.subject || process.classeNome || process.classeCompleta?.nome || '',
         priority: process.priority || 'medium',
         reminder: process.reminder || '60'
-      });
+      };
+      
+      console.log('🔧 Nova formData:', newFormData);
+      console.log('🔍 processNumber em newFormData:', newFormData.processNumber);
+      
+      setFormData(newFormData);
     } else if (selectedDate) {
       setFormData(prev => ({
         ...prev,
@@ -46,6 +66,12 @@ const ProcessModal = ({ process, selectedDate, onSave, onClose }) => {
       }));
     }
   }, [process, selectedDate]);
+
+  // Log quando formData muda
+  useEffect(() => {
+    console.log('📊 formData atualizado:', formData);
+    console.log('   processNumber no state:', formData.processNumber);
+  }, [formData]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
