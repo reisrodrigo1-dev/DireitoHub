@@ -2,6 +2,9 @@
 // Documentação: https://datajud-wiki.cnj.jus.br/api-publica/
 // Integração REAL com a API oficial do CNJ - SEM dados simulados
 
+// Importar funcionalidades de outras fases
+import { mapearPolos } from './mapearPolos.js';
+
 // URLs para as serverless functions da Vercel
 // Em produção, usa o mesmo domínio (www.direitohub.com.br) com rewrite no vercel.json
 // Em desenvolvimento (localhost), acessa a API de produção do direitohub.com.br
@@ -1120,6 +1123,9 @@ export const converterDadosDataJud = (dadosDataJud) => {
 
     // Status determinado automaticamente
     status: mapearStatusProcesso(dadosDataJud.movimentos),
+
+    // FASE 1: Mapear partes em polos (autores, requeridos, advogados)
+    polos: mapearPolos(dadosDataJud.partes || [], dadosDataJud.representantes || []),
 
     // Dados originais preservados para referência completa
     dadosOriginais: dadosDataJud,
