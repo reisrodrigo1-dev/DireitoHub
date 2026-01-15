@@ -12,6 +12,8 @@
  */
 export function mapearPolos(partes = [], representantes = []) {
   console.log('🗂️  Iniciando mapeamento de polos...');
+  console.log('📊 Partes recebidas:', partes);
+  console.log('👥 Representantes recebidos:', representantes);
   
   const resultado = {
     autores: [],
@@ -21,21 +23,27 @@ export function mapearPolos(partes = [], representantes = []) {
 
   // Validação: partes deve ser array
   if (!Array.isArray(partes)) {
-    console.warn('⚠️ Partes não é um array válido');
+    console.warn('⚠️ Partes não é um array válido, tipo:', typeof partes, 'valor:', partes);
     return resultado;
   }
 
   // Validação: representantes deve ser array
   const reps = Array.isArray(representantes) ? representantes : [];
 
+  console.log(`📋 Processando ${partes.length} partes...`);
+
   // Processar partes
-  partes.forEach((parte) => {
+  partes.forEach((parte, idx) => {
+    console.log(`  ├─ Parte ${idx}:`, parte);
+    
     if (!parte || typeof parte !== 'object') {
       console.warn('⚠️ Parte inválida encontrada:', parte);
       return;
     }
 
     const { nome, polo, tipoPessoa, documento, inscricao } = parte;
+    
+    console.log(`  │  - nome: ${nome}, polo: ${polo}, tipoPessoa: ${tipoPessoa}`);
 
     // Validar nome e polo
     if (!nome || !polo) {

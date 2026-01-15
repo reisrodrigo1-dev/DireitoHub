@@ -1073,6 +1073,8 @@ function formatarDataSegura(data) {
 // Função para converter dados da API para o formato do sistema
 export const converterDadosDataJud = (dadosDataJud) => {
   console.log('🔄 Convertendo dados do DataJud:', dadosDataJud);
+  console.log('📝 Partes no DataJud:', dadosDataJud?.partes);
+  console.log('👨‍⚖️ Representantes no DataJud:', dadosDataJud?.representantes);
 
   if (!dadosDataJud) {
     return null;
@@ -1125,7 +1127,19 @@ export const converterDadosDataJud = (dadosDataJud) => {
     status: mapearStatusProcesso(dadosDataJud.movimentos),
 
     // FASE 1: Mapear partes em polos (autores, requeridos, advogados)
-    polos: mapearPolos(dadosDataJud.partes || [], dadosDataJud.representantes || []),
+    polos: (() => {
+      console.log('🔍 Inspecionando dadosDataJud.partes:', dadosDataJud.partes);
+      console.log('🔍 Tipo de partes:', typeof dadosDataJud.partes);
+      console.log('🔍 É array?', Array.isArray(dadosDataJud.partes));
+      console.log('🔍 Inspecionando dadosDataJud.representantes:', dadosDataJud.representantes);
+      console.log('🔍 Tipo de representantes:', typeof dadosDataJud.representantes);
+      console.log('🔍 É array?', Array.isArray(dadosDataJud.representantes));
+      
+      // Debug: mostrar todas as chaves do objeto
+      console.log('🔍 Chaves do dadosDataJud:', Object.keys(dadosDataJud));
+      
+      return mapearPolos(dadosDataJud.partes || [], dadosDataJud.representantes || []);
+    })(),
 
     // Dados originais preservados para referência completa
     dadosOriginais: dadosDataJud,
