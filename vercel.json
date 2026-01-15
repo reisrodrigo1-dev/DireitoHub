@@ -1,6 +1,10 @@
 {
   "rewrites": [
     {
+      "source": "/api/datajud/:path*",
+      "destination": "/api/datajud/:path*"
+    },
+    {
       "source": "/advogado/(.*)",
       "destination": "/index.html"
     },

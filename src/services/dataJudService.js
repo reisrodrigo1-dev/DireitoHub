@@ -3,8 +3,10 @@
 // Integração REAL com a API oficial do CNJ - SEM dados simulados
 
 // URLs para as serverless functions da Vercel
+// Em produção, usa o mesmo domínio (www.direitohub.com.br) com rewrite no vercel.json
+// Em desenvolvimento, acessa diretamente via localhost
 const VERCEL_API_BASE = process.env.NODE_ENV === 'production'
-  ? 'https://direitohub.vercel.app/api/datajud'
+  ? '/api/datajud'
   : 'http://localhost:3000/api/datajud';
 
 // Chave de API (removida do frontend por segurança)
