@@ -115,132 +115,14 @@ const DataJudSearchModal = ({ isOpen, onClose, onSelectProcess }) => {
       }
     } catch (error) {
       console.error('Erro na busca:', error);
-      
-      // Se não conseguir conectar com o backend, mostrar dados mockados para teste
-      console.log('🔄 Usando dados mockados para demonstração...');
-        {
-          _id: 'mock_processo_1',
-          _score: 1.0,
-          numeroProcesso: '12345678920248260001',
-          tribunalNome: 'Tribunal de Justiça de São Paulo',
-          tribunal: 'TJSP',
-          grau: 'G1',
-          classe: {
-            codigo: 436,
-            nome: 'Procedimento Comum Cível'
-          },
-          assuntos: [
-            {
-              codigo: 1127,
-              nome: 'Responsabilidade Civil'
-            },
-            {
-              codigo: 10375,
-              nome: 'Dano Material'
-            },
-            {
-              codigo: 6017,
-              nome: 'Indenização por Dano Moral'
-            }
-          ],
-          movimentos: [
-            {
-              codigo: 26,
-              nome: 'Distribuição',
-              dataHora: '2024-01-10T09:00:00Z'
-            },
-            {
-              codigo: 132,
-              nome: 'Conclusão',
-              dataHora: '2024-02-15T14:30:00Z'
-            },
-            {
-              codigo: 193,
-              nome: 'Designação de Audiência de Conciliação',
-              dataHora: '2024-08-25T14:00:00Z'
-            },
-            {
-              codigo: 123,
-              nome: 'Juntada de Documento',
-              dataHora: '2024-07-10T10:15:00Z'
-            }
-          ],
-          orgaoJulgador: {
-            codigo: 1234,
-            nome: '1ª Vara Cível Central',
-            codigoMunicipioIBGE: 3550308
-          },
-          sistema: {
-            codigo: 1,
-            nome: 'SAJ'
-          },
-          formato: {
-            codigo: 1,
-            nome: 'Eletrônico'
-          },
-          nivelSigilo: 0,
-          dataAjuizamento: '2024-01-10T09:00:00Z',
-          dataHoraUltimaAtualizacao: '2024-07-15T16:45:00Z'
-        },
-        {
-          _id: 'mock_processo_2',
-          _score: 0.9,
-          numeroProcesso: '98765432120248260002',
-          tribunalNome: 'Tribunal de Justiça de São Paulo',
-          tribunal: 'TJSP',
-          grau: 'G2',
-          classe: {
-            codigo: 1116,
-            nome: 'Apelação Cível'
-          },
-          assuntos: [
-            {
-              codigo: 1650,
-              nome: 'Contratos de Consumo'
-            },
-            {
-              codigo: 1651,
-              nome: 'Responsabilidade do Fornecedor'
-            }
-          ],
-          movimentos: [
-            {
-              codigo: 26,
-              nome: 'Distribuição',
-              dataHora: '2024-03-05T08:30:00Z'
-            },
-            {
-              codigo: 51,
-              nome: 'Audiência',
-              dataHora: '2024-08-30T15:00:00Z'
-            }
-          ],
-          orgaoJulgador: {
-            codigo: 5678,
-            nome: '2ª Câmara de Direito Privado',
-            codigoMunicipioIBGE: 3550308
-          },
-          sistema: {
-            codigo: 2,
-            nome: 'PJe'
-          },
-          formato: {
-            codigo: 1,
-            nome: 'Eletrônico'
-          },
-          nivelSigilo: 1,
-          dataAjuizamento: '2024-03-05T08:30:00Z',
-          dataHoraUltimaAtualizacao: '2024-07-16T09:20:00Z'
-        }
-      ];
-      
-      setResults(mockData);
+      setResults([]);
     } finally {
       setLoading(false);
     }
   };
 
-  const validateSearch = () => {      switch (searchType) {
+  const validateSearch = () => {
+    switch (searchType) {
         case 'numero':
           if (!numeroProcesso.trim()) {
             alert('Por favor, informe o número do processo');

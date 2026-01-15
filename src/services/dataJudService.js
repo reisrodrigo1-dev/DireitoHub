@@ -4,10 +4,10 @@
 
 // URLs para as serverless functions da Vercel
 // Em produção, usa o mesmo domínio (www.direitohub.com.br) com rewrite no vercel.json
-// Em desenvolvimento, acessa diretamente via localhost
+// Em desenvolvimento (localhost), acessa a API de produção do direitohub.com.br
 const VERCEL_API_BASE = process.env.NODE_ENV === 'production'
   ? '/api/datajud'
-  : 'http://localhost:3000/api/datajud';
+  : 'https://www.direitohub.com.br/api/datajud';
 
 // Chave de API (removida do frontend por segurança)
 const API_KEY = 'cDZHYzlZa0JadVREZDJCendQbXY6SkJlTzNjLV9TRENyQk1RdnFKZGRQdw==';
