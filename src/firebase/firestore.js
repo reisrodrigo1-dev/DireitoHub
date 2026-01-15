@@ -12,7 +12,8 @@ import {
   limit,
   serverTimestamp,
   onSnapshot,
-  writeBatch
+  writeBatch,
+  Timestamp
 } from 'firebase/firestore';
 import { db } from './config';
 
@@ -276,31 +277,47 @@ const clientService = {
 export const caseService = {
   // Função auxiliar para limpar dados undefined
   _cleanDataForFirebase(data) {
+    if (!data || typeof data !== 'object') {
+      return {};
+    }
+
     const cleanData = {};
     
     Object.keys(data).forEach(key => {
       const value = data[key];
       
-      // Apenas incluir campos que não são undefined
-      if (value !== undefined) {
-        // Se for um objeto, limpar recursivamente
-        if (value && typeof value === 'object' && !Array.isArray(value) && !(value instanceof Date)) {
-          const cleanedObject = this._cleanDataForFirebase(value);
-          if (Object.keys(cleanedObject).length > 0) {
-            cleanData[key] = cleanedObject;
-          }
-        } 
-        // Se for um array, filtrar valores undefined
-        else if (Array.isArray(value)) {
-          const cleanedArray = value.filter(item => item !== undefined);
-          if (cleanedArray.length > 0) {
-            cleanData[key] = cleanedArray;
-          }
-        } 
-        // Valores primitivos válidos
-        else {
-          cleanData[key] = value;
+      // Ignorar valores undefined, null, NaN
+      if (value === undefined || value === null || (typeof value === 'number' && isNaN(value))) {
+        return;
+      }
+      
+      // Se for um objeto, limpar recursivamente
+      if (typeof value === 'object' && !Array.isArray(value) && !(value instanceof Date) && !(value instanceof Timestamp)) {
+        const cleanedObject = this._cleanDataForFirebase(value);
+        // Apenas incluir objetos que têm propriedades
+        if (Object.keys(cleanedObject).length > 0) {
+          cleanData[key] = cleanedObject;
         }
+      } 
+      // Se for um array, filtrar e limpar recursivamente
+      else if (Array.isArray(value)) {
+        const cleanedArray = value
+          .filter(item => item !== undefined && item !== null)
+          .map(item => {
+            if (typeof item === 'object' && !(item instanceof Date) && !(item instanceof Timestamp)) {
+              return this._cleanDataForFirebase(item);
+            }
+            return item;
+          });
+        
+        // Apenas incluir arrays que têm itens
+        if (cleanedArray.length > 0) {
+          cleanData[key] = cleanedArray;
+        }
+      } 
+      // Valores válidos (strings, números, booleans, dates, etc)
+      else {
+        cleanData[key] = value;
       }
     });
     
