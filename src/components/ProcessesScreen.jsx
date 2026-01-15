@@ -1226,13 +1226,19 @@ const ProcessesScreen = () => {
             
             try {
               if (user?.uid) {
+                // Sempre incluir userId no objeto a salvar
+                const processWithUserId = {
+                  ...processToSave,
+                  userId: user.uid
+                };
+                
                 // Verificar se é um processo do DataJud
                 if (selectedProcess?.isFromDataJud) {
                   // Se tem ID, é para atualizar; caso contrário, criar novo
                   if (selectedProcess?.id) {
                     // Processo do DataJud já existe no Firebase, atualizar
                     console.log('📝 Atualizando processo do DataJud no Firebase:', selectedProcess.id);
-                    const result = await caseService.updateCase(selectedProcess.id, processToSave);
+                    const result = await caseService.updateCase(selectedProcess.id, processWithUserId);
                     if (result.success) {
                       console.log('✅ Processo do DataJud atualizado no Firebase:', selectedProcess.id);
                       
@@ -1249,7 +1255,7 @@ const ProcessesScreen = () => {
                   } else {
                     // Processo do DataJud não existe no Firebase, criar novo
                     console.log('➕ Criando novo processo do DataJud');
-                    const result = await caseService.createCase(user.uid, processToSave);
+                    const result = await caseService.createCase(user.uid, processWithUserId);
                     if (result.success) {
                       console.log('✅ Processo do DataJud criado:', result.id);
                       
@@ -1277,7 +1283,7 @@ const ProcessesScreen = () => {
                   if (selectedProcess?.id) {
                     // Editando processo regular existente
                     console.log('📝 Atualizando processo regular no Firebase:', selectedProcess.id);
-                    const result = await caseService.updateCase(selectedProcess.id, processToSave);
+                    const result = await caseService.updateCase(selectedProcess.id, processWithUserId);
                     if (result.success) {
                       console.log('✅ Processo regular atualizado:', selectedProcess.id);
                       
@@ -1299,7 +1305,7 @@ const ProcessesScreen = () => {
                   } else {
                     // Criando novo processo regular
                     console.log('➕ Criando novo processo regular');
-                    const result = await caseService.createCase(user.uid, processToSave);
+                    const result = await caseService.createCase(user.uid, processWithUserId);
                     if (result.success) {
                       console.log('✅ Processo regular criado:', result.id);
                       
