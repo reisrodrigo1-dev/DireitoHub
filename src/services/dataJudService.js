@@ -994,7 +994,44 @@ function formatarDataSegura(data) {
       // Remover caracteres especiais inválidos
       const dataLimpa = data.trim();
       
-      // Verificar se é uma data válida
+      // Tentar converter formato compactado YYYYMMDDHHMMSS para ISO
+      if (/^\d{14}$/.test(dataLimpa)) {
+        const ano = dataLimpa.substring(0, 4);
+        const mes = dataLimpa.substring(4, 6);
+        const dia = dataLimpa.substring(6, 8);
+        const hora = dataLimpa.substring(8, 10);
+        const minuto = dataLimpa.substring(10, 12);
+        const segundo = dataLimpa.substring(12, 14);
+        
+        const dataISO = `${ano}-${mes}-${dia}T${hora}:${minuto}:${segundo}Z`;
+        const date = new Date(dataISO);
+        
+        if (isNaN(date.getTime())) {
+          console.warn('⚠️ Data inválida encontrada:', data);
+          return null;
+        }
+        
+        return date.toISOString().split('T')[0];
+      }
+      
+      // Tentar formato compactado sem hora YYYYMMDD
+      if (/^\d{8}$/.test(dataLimpa)) {
+        const ano = dataLimpa.substring(0, 4);
+        const mes = dataLimpa.substring(4, 6);
+        const dia = dataLimpa.substring(6, 8);
+        
+        const dataISO = `${ano}-${mes}-${dia}T00:00:00Z`;
+        const date = new Date(dataISO);
+        
+        if (isNaN(date.getTime())) {
+          console.warn('⚠️ Data inválida encontrada:', data);
+          return null;
+        }
+        
+        return date.toISOString().split('T')[0];
+      }
+      
+      // Verificar se é uma data ISO válida
       const date = new Date(dataLimpa);
       if (isNaN(date.getTime())) {
         console.warn('⚠️ Data inválida encontrada:', data);
