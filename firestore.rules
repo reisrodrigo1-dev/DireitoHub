@@ -3,6 +3,41 @@ service cloud.firestore {
   match /databases/{database}/documents {
     
     // ============================================
+    // JUDICIAL DATA AGGREGATION - NEW SYSTEM
+    // ============================================
+    
+    // Judicial processes - PUBLIC READ (for search)
+    match /judicial_processes/{processId} {
+      allow read: if true; // Anyone can search
+      allow create, update, delete: if isAdmin();
+    }
+    
+    // Movements subcollection
+    match /judicial_processes/{processId}/movimentos/{movimentoId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
+    
+    // Sync logs - ADMIN ONLY
+    match /sync_logs/{logId} {
+      allow read: if isAdmin();
+      allow create: if isAdmin();
+      allow update, delete: if false; // Never update logs
+    }
+    
+    // Error tracking - ADMIN ONLY
+    match /error_tracking/{errorId} {
+      allow read: if isAdmin();
+      allow create: if isAdmin();
+    }
+    
+    // Batch queue - ADMIN ONLY
+    match /batch_queue/{batchId} {
+      allow read: if isAdmin();
+      allow create, update: if isAdmin();
+    }
+    
+    // ============================================
     // PÁGINAS DE ADVOGADO - Acesso Público
     // ============================================
     match /lawyerPages/{pageId} {
@@ -167,6 +202,19 @@ service cloud.firestore {
       allow read, update, delete: if request.auth != null && 
                                    (request.auth.uid == resource.data.senderUserId ||
                                     request.auth.uid == resource.data.recipientUserId);
+    }
+    
+    // ============================================
+    // DEFAULT DENY - Cost Protection
+    // ============================================
+    match /{document=**} {
+      allow read, write: if false;
+    }
+    
+    // Helper function: Check admin status
+    function isAdmin() {
+      return request.auth != null && 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
   }
 }

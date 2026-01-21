@@ -1,0 +1,12 @@
+{
+  "type": "service_account",
+  "project_id": "bipetech-marketplace",
+  "private_key_id": "firebase-admin-key",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC1Z/uhcfPGXj2s\n7CAhpDUC0g4AuYzgY3ZJoHMdO1XrRE899r9+o+bmC0jfMCxkcxUV05RgZyN5nMBn\nY/hBWpUjpN+E6689Uc6doCdo4HYSCOw9Fx/SouJuqgZGYF6iqO0pyCVk0eROh8RD\ng7yARJnsHd2csK97TrRF20Pd5g4ETnvy0zXdrLTEBRrgEFUZbHdwFEUJzC+H5WqB\nDxUG67RmVBlBspKQHwCrLhig408JNXWeJ4bDONRS5M8tVwcVIyp8iKbqTlbx6pns\n7GnP7qN8oxYeS7c3FAXQE5r3uI9Z3h8S00BO96sbfmK+7RbrZn16Ufdnl1uMt7/p\ng8fIJyZFAgMBAAECggEAA11P2fEym8HAtBXXDLiucQRzVQkb90dw+LGcoPSqRchJ\nDfWnHJKupCKeceFDWYOW5wY7EMSo8Eb7fI9qmc+zx2r16FG0uNbtFZhUUsoi9neq\n5gEpSm9R8sp9fk2oQ60NZQJ8yw9nhBtZhQUK+HgNQMdXBmJyhr9xcYA9FH8BUIwa\nDnPUy94j7QSz9QEPosNupk4UWtshcI7t6LZ2IUfHVmkocL8sLGiR8NAIerTL0A7q\nG5HY8So3bxpSqsE3VZoCqkfvq5fT5DPhOkn98A0mt3BYvGEbCN3A0kN76S8WGL9v\njM7cvrG8JgdU3/aqAtT1DQZCiyUcVBxO1yfrCBG/2wKBgQDwuzR4HqLCikeJagnQ\n2AkwnVB92g/AB5DM2Hwm/pId2PNEs4yTaL4imUAkrlfkjbWhhUtNHlfevkVQr3cl\n/gVvnYLLL3c9yktozAgZGtQrUN0U+P3gLO7MpH78DX6o+evRaxubt2Ja5Ds9Bpn2\nsuTUmkH4BuSd1fhqeFa5WfVMywKBgQDA6YGfzBw1KsKF1W3l6VZXn1OyxUY4LPSV\nTzIvsWLUibGGwPzWsvalH7rsUKFrxtnUoIEh8o+/R8zt/rBeBar+u4Nk1SrR9hIY\njng5HBMKoh/mPrdgDJy05ts+oSTig22N8i//P8MMqK55lk1x1YZsU/B/Im37RYOi\no6ssjP2HLwKBgQCL5s/0ayF926z9YCG6PIMCvLoVmdADcqIlWj60zseODxI5v/sX\nhAzTwKp1Ztjvm6eN6hA8DkFU0tEntgGRk9IG7swfV0N+Jn2ytriSFnRtg/4n/RhV\n2uchCQw/YXxVqYDx4MRXt7iyR+dhbN+3bnnsUIW8Jg1g6QQIpE0KRQx5BwKBgDkO\nFtdjL8iNwACDMkC4dV/u8HtEG1OMAD6UsLwoU5mWq9m2BFGflpEZxFgWNNfCdTSM\n0ARxUBB7tOGC3TjBpmQ2o1LUNRjqFUoMAQSrB/qyHosja2rN8B8U1C0+zcDsrB86\nTPXKLu70iL3PNVKAm4Q4gz2mui6Bzb/xdjPz8xvjAoGAbGcNe9TecYs5clVGbiMQ\nzamRrWqpJNAOLqo83vAwZeVmjZEEQY1UJrEwo44WB1hAE7vasyLKOj6CjiArIloh\nqzcSrZw+8uKOpCVWSzZAKin1fHu5XsFZkXWnXeax7AHRt07JHE5iUfd5dqJWOFRp\nQTf8dt2iBrOdXAkcGjNEc1g=\n-----END PRIVATE KEY-----\n",
+  "client_email": "firebase-adminsdk-fbsvc@bipetech-marketplace.iam.gserviceaccount.com",
+  "client_id": "firebase-admin-sdk",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/firebase-adminsdk-fbsvc%40bipetech-marketplace.iam.gserviceaccount.com"
+}

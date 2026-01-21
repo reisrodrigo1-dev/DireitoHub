@@ -140,7 +140,7 @@ O sistema seguirá um fluxo sequencial obrigatório:
 3. **III – DA REFUTAÇÃO DOS ARGUMENTOS DA CONTESTAÇÃO** (mín. 4.000 tokens)
 4. **IV – DOS PEDIDOS**
 
-**📄 Formatos aceitos:** .txt, .docx, .pdf (máx. 10MB)
+**📄 Formatos aceitos:** .txt, .docx, .pdf (máx. 25MB)
 
 ⚠️ **IMPORTANTE:** Este processo é sequencial e controlado. Cada seção será elaborada após sua confirmação individual.
 
@@ -158,7 +158,7 @@ Para elaborar contrarrazões consistentes, preciso do recurso da parte contrári
 - Acórdão recorrido
 - Documentos relevantes do processo
 
-**Formatos aceitos:** .txt, .docx (máx. 10MB)
+**Formatos aceitos:** .txt, .docx (máx. 25MB)
 
 Anexe o recurso da parte contrária para elaborar as contrarrazões.`;
   }
@@ -174,7 +174,7 @@ Para fundamentar adequadamente o Recurso Especial, preciso dos documentos proces
 - Jurisprudência divergente
 - Legislação federal violada
 
-**Formatos aceitos:** .txt, .docx (máx. 10MB)
+**Formatos aceitos:** .txt, .docx (máx. 25MB)
 
 Anexe os documentos para fundamentar o Recurso Especial.`;
   }
@@ -190,7 +190,7 @@ Para elaborar despacho adequado, preciso das petições e documentos:
 - Manifestações processuais
 - Histórico do processo
 
-**Formatos aceitos:** .txt, .docx (máx. 10MB)
+**Formatos aceitos:** .txt, .docx (máx. 25MB)
 
 Anexe as petições e documentos para elaborar o despacho.`;
   }
@@ -206,7 +206,7 @@ Para realizar uma análise completa e precisa dos laudos médicos, preciso que v
 - Relatórios médicos
 - Documentos relacionados ao caso
 
-**Formatos aceitos:** .txt, .docx (máx. 10MB)
+**Formatos aceitos:** .txt, .docx (máx. 25MB)
 
 Por favor, anexe o documento para prosseguir com a análise.`;
   }
@@ -221,7 +221,7 @@ Para analisar adequadamente a PEC, preciso do documento oficial:
 - Justificativa da proposta
 - Documentos complementares (se houver)
 
-**Formatos aceitos:** .txt, .docx (máx. 10MB)
+**Formatos aceitos:** .txt, .docx (máx. 25MB)
 
 Anexe a PEC para realizar a análise jurídica detalhada.`;
   }
@@ -236,7 +236,7 @@ Para corrigir e aprimorar seu texto, preciso do documento original:
 - Peça jurídica
 - Documento para revisão
 
-**Formatos aceitos:** .txt, .docx (máx. 10MB)
+**Formatos aceitos:** .txt, .docx (máx. 25MB)
 
 Anexe o documento que deseja corrigir e aprimorar.`;
   }
@@ -253,7 +253,7 @@ Para elaborar memoriais fundamentados, preciso dos documentos do processo:
 - Decisões relevantes
 - Documentos do processo
 
-**Formatos aceitos:** .txt, .docx (máx. 10MB)
+**Formatos aceitos:** .txt, .docx (máx. 25MB)
 
 Anexe os documentos processuais para elaboração dos memoriais.`;
   }
@@ -276,7 +276,7 @@ Para criar um resumo claro e acessível para seu cliente, preciso da peça jurí
 ✅ Glossário com termos técnicos
 ✅ Respostas às dúvidas frequentes
 
-**Formatos aceitos:** .txt, .docx, .pdf (máx. 10MB)
+**Formatos aceitos:** .txt, .docx, .pdf (máx. 25MB)
 
 Anexe o documento que deseja resumir para seu cliente.`;
   }
@@ -299,7 +299,7 @@ Para elaborar uma contra-argumentação robusta e tecnicamente irrefutável, pre
 ✅ Minuta pronta para uso processual
 ✅ Linguagem técnico-jurídica formal
 
-**Formatos aceitos:** .txt, .docx, .pdf (máx. 10MB)
+**Formatos aceitos:** .txt, .docx, .pdf (máx. 25MB)
 
 Anexe o documento com os argumentos a serem refutados e indique o tema específico.`;
   }
@@ -388,7 +388,7 @@ Para realizar ${promptName}, preciso que você anexe o documento que deve ser an
 **Tipos de arquivo aceitos:**
 - Documentos de texto (.txt)
 - Documentos Word (.docx)
-- Tamanho máximo: 10MB
+- Tamanho máximo: 25MB
 
 Por favor, anexe o documento relacionado ao seu caso.`;
 };

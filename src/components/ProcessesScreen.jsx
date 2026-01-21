@@ -6,7 +6,6 @@ import { useAuth } from '../contexts/AuthContext';
 import { caseService } from '../firebase/firestore';
 import DataJudSearchModal from './DataJudSearchModal';
 import DataJudProcessDetails from './DataJudProcessDetails';
-import ProcessDetails from './ProcessDetails';
 import CalendarModal from './CalendarModal';
 import { temAudiencia } from '../services/calendarService';
 import { processCalendarIntegration } from '../services/processCalendarIntegration';
@@ -1165,64 +1164,21 @@ const ProcessesScreen = () => {
               ...(selectedProcess?.id && { id: selectedProcess.id }),
               lastUpdate: new Date().toISOString().split('T')[0],
               
-              // Preservar TODAS as informações do DataJud se existirem
+              // Preservar TUDO do processo selecionado (processão original + modificações)
+              // Se for DataJud, spread todo o objeto primeiro para pegar TUDO
+              ...(selectedProcess?.isFromDataJud && selectedProcess),
+              
+              // Depois sobrescrever com dados editados do formulário
+              ...processData,
+              
+              // Garantir que metadados estão corretos
               ...(selectedProcess?.isFromDataJud && {
-                // Dados originais completos
-                dadosOriginais: selectedProcess.dadosOriginais,
-                
-                // Informações estruturadas
-                tribunal: selectedProcess.tribunal,
-                grau: selectedProcess.grau,
-                classe: selectedProcess.classe,
-                classeCompleta: selectedProcess.classeCompleta,
-                classeNome: selectedProcess.classeNome,
-                classeCodego: selectedProcess.classeCodigo,
-                
-                // Informações detalhadas
-                assuntos: selectedProcess.assuntos,
-                assuntosCompletos: selectedProcess.assuntosCompletos,
-                movimentos: selectedProcess.movimentos,
-                ultimosMovimentos: selectedProcess.ultimosMovimentos,
-                
-                // Órgão e sistema
-                orgaoJulgador: selectedProcess.orgaoJulgador,
-                orgaoJulgadorCompleto: selectedProcess.orgaoJulgadorCompleto,
-                orgaoJulgadorNome: selectedProcess.orgaoJulgadorNome,
-                orgaoJulgadorCodigo: selectedProcess.orgaoJulgadorCodigo,
-                
-                // Polos/Partes
-                partes: selectedProcess.partes,
-                polos: selectedProcess.polos,
-                representantes: selectedProcess.representantes,
-                
-                // Dados financeiros
-                valorCausa: selectedProcess.valorCausa,
-                
-                // Datas específicas
-                dataAjuizamento: selectedProcess.dataAjuizamento,
-                dataHoraUltimaAtualizacao: selectedProcess.dataHoraUltimaAtualizacao,
-                dataImportacao: selectedProcess.dataImportacao || new Date().toISOString(),
-                
-                // Números e identificadores
-                numeroProcesso: selectedProcess.numeroProcesso,
-                numeroProcessoFormatado: selectedProcess.numeroProcessoFormatado,
-                numeroUnico: selectedProcess.numeroUnico,
-                numeroOrigem: selectedProcess.numeroOrigem,
-                
-                // Informações de sigilo
-                sigiloDados: selectedProcess.sigiloDados,
-                nivelSigilo: selectedProcess.nivelSigilo,
-                
-                // Resumo do processo
-                resumoProcesso: selectedProcess.resumoProcesso,
-                
-                // Metadados
                 isFromDataJud: true,
-                isSimulated: selectedProcess.isSimulated || false
+                dataImportacao: selectedProcess.dataImportacao || new Date().toISOString(),
               })
             };
             
-            console.log('💾 Salvando processo no Firebase:', processToSave);
+            console.log('💾 Salvando processo com TODOS os dados do DataJud:', processToSave);
             
             try {
               if (user?.uid) {
@@ -1393,12 +1349,30 @@ const ProcessesScreen = () => {
       )}
 
       {/* Modal de Detalhes do Processo */}
-      {showProcessDetails && (
-        <ProcessDetails
+      {showProcessDetails && processForDetails && (
+        <ProcessModal
           process={processForDetails}
           onClose={() => {
             setShowProcessDetails(false);
             setProcessForDetails(null);
+          }}
+          onSave={async (processData) => {
+            // Se quiser salvar também a partir daqui
+            if (user?.uid) {
+              const processWithUserId = {
+                ...processData,
+                userId: user.uid
+              };
+              
+              if (processForDetails?.id) {
+                const result = await caseService.updateCase(processForDetails.id, processWithUserId);
+                if (result.success) {
+                  await loadProcesses();
+                  setShowProcessDetails(false);
+                  setProcessForDetails(null);
+                }
+              }
+            }
           }}
         />
       )}
@@ -1468,11 +1442,14 @@ const ProcessModal = ({ process, onClose, onSave }) => {
     description: process?.description || ''
   });
 
+  const [activeTab, setActiveTab] = useState('info');
+
   const isFromDataJud = process?.isFromDataJud || process?.dataJudOriginal;
 
   console.log('🔍 Modal ProcessModal - processo recebido:', process);
   console.log('🔍 Modal ProcessModal - isFromDataJud:', isFromDataJud);
-  console.log('🔍 Modal ProcessModal - formData.number:', formData.number);
+  console.log('🔍 Modal ProcessModal - movimentos:', process?.movimentos);
+  console.log('🔍 Modal ProcessModal - ultimosMovimentos:', process?.ultimosMovimentos);
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -1516,17 +1493,16 @@ const ProcessModal = ({ process, onClose, onSave }) => {
   }, [process]);
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
-        <div className="flex justify-between items-center p-6 border-b">
-          <h2 className="text-2xl font-bold text-gray-900">
-            {process ? 'Editar Processo' : 'Novo Processo'}
-            {isFromDataJud && (
-              <span className="ml-2 bg-yellow-100 text-yellow-800 px-2 py-1 rounded-full text-sm">
-                DataJud
-              </span>
-            )}
-          </h2>
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[95vh] flex flex-col">
+        {/* Header */}
+        <div className="flex justify-between items-center p-6 border-b sticky top-0 bg-white z-10">
+          <div className="flex-1">
+            <h2 className="text-2xl font-bold text-gray-900">
+              {process ? 'Detalhes do Processo' : 'Novo Processo'}
+            </h2>
+            <p className="text-sm text-gray-600 mt-1">{process?.number || process?.numeroProcessoFormatado}</p>
+          </div>
           <button
             onClick={onClose}
             className="text-gray-400 hover:text-gray-600 text-2xl"
@@ -1535,208 +1511,365 @@ const ProcessModal = ({ process, onClose, onSave }) => {
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          {/* Informações do DataJud */}
-          {isFromDataJud && (
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
-              <h3 className="font-semibold text-yellow-800 mb-2 flex items-center">
-                <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                Informações do DataJud
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                <div>
-                  <span className="font-medium text-yellow-700">Tribunal:</span>
-                  <p className="text-yellow-600">{process.tribunalNome || process.tribunal}</p>
-                </div>
-                <div>
-                  <span className="font-medium text-yellow-700">Grau:</span>
-                  <p className="text-yellow-600">{process.grau}</p>
-                </div>
-                <div>
-                  <span className="font-medium text-yellow-700">Classe:</span>
-                  <p className="text-yellow-600">{process.classe?.nome}</p>
-                </div>
-                <div>
-                  <span className="font-medium text-yellow-700">Sistema:</span>
-                  <p className="text-yellow-600">{process.sistema?.nome}</p>
-                </div>
-                {process.assuntos && process.assuntos.length > 0 && (
-                  <div className="md:col-span-2">
-                    <span className="font-medium text-yellow-700">Assuntos:</span>
-                    <div className="flex flex-wrap gap-1 mt-1">
-                      {process.assuntos.map((assunto, index) => (
-                        <span key={index} className="bg-yellow-100 text-yellow-800 px-2 py-1 rounded text-xs">
-                          {assunto.nome}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                {process.movimentos && process.movimentos.length > 0 && (
-                  <div className="md:col-span-2">
+        {/* Abas */}
+        {(isFromDataJud || process?.movimentos?.length > 0) && (
+          <div className="flex border-b bg-gray-50 sticky top-16 z-10">
+            <button
+              onClick={() => setActiveTab('info')}
+              className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
+                activeTab === 'info'
+                  ? 'border-b-2 border-blue-600 text-blue-600'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              ℹ️ Informações
+            </button>
+            {process?.movimentos?.length > 0 && (
+              <button
+                onClick={() => setActiveTab('movimentos')}
+                className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
+                  activeTab === 'movimentos'
+                    ? 'border-b-2 border-blue-600 text-blue-600'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                📋 Movimentações ({process?.movimentos?.length || 0})
+              </button>
+            )}
+            {process?.assuntos?.length > 0 && (
+              <button
+                onClick={() => setActiveTab('assuntos')}
+                className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
+                  activeTab === 'assuntos'
+                    ? 'border-b-2 border-blue-600 text-blue-600'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                🏷️ Assuntos ({process?.assuntos?.length || 0})
+              </button>
+            )}
+            <button
+              onClick={() => setActiveTab('editar')}
+              className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
+                activeTab === 'editar'
+                  ? 'border-b-2 border-blue-600 text-blue-600'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              ✏️ Editar
+            </button>
+          </div>
+        )}
 
-                    <span className="font-medium text-yellow-700">Movimentos:</span>
-                    <p className="text-yellow-600">{process.movimentos.length} movimentos processuais</p>
-                  </div>
-                )}
-                {process.dataJudImportDate && (
-                  <div className="md:col-span-2">
-                    <span className="font-medium text-yellow-700">Importado em:</span>
-                    <p className="text-yellow-600">{new Date(process.dataJudImportDate).toLocaleString('pt-BR')}</p>
-                  </div>
-                )}
+        {/* Conteúdo com scroll */}
+        <div className="flex-1 overflow-y-auto">
+          {/* ABA: INFORMAÇÕES */}
+          {(!isFromDataJud || activeTab === 'info') && (
+            <div className="p-6 space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Processo</label>
+                  <p className="text-gray-900 font-semibold">{process?.number || process?.numeroProcessoFormatado}</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Cliente</label>
+                  <p className="text-gray-900">{process?.client}</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Tribunal</label>
+                  <p className="text-gray-900">{process?.court || process?.orgaoJulgadorNome}</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                  <p className="text-gray-900">{process?.status}</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Data de Ajuizamento</label>
+                  <p className="text-gray-900">{process?.startDate || process?.dataAjuizamento}</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Próxima Audiência</label>
+                  <p className="text-gray-900">{process?.nextHearing}</p>
+                </div>
               </div>
+
+              {(isFromDataJud || process?.movimentos?.length > 0) && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <h4 className="font-semibold text-blue-900 mb-3">📊 Informações Processual</h4>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
+                    <div>
+                      <span className="text-blue-700 font-medium">Grau:</span>
+                      <p className="text-blue-600">{process?.grau}</p>
+                    </div>
+                    <div>
+                      <span className="text-blue-700 font-medium">Tribunal:</span>
+                      <p className="text-blue-600">{process?.tribunal || process?.tribunalNome}</p>
+                    </div>
+                    <div>
+                      <span className="text-blue-700 font-medium">Classe:</span>
+                      <p className="text-blue-600">{process?.classeNome || process?.classe?.nome}</p>
+                    </div>
+                    {process?.sistema?.nome && (
+                      <div>
+                        <span className="text-blue-700 font-medium">Sistema:</span>
+                        <p className="text-blue-600">{process.sistema.nome}</p>
+                      </div>
+                    )}
+                    {process?.orgaoJulgador?.nome && (
+                      <div className="md:col-span-2">
+                        <span className="text-blue-700 font-medium">Órgão Julgador:</span>
+                        <p className="text-blue-600">{process.orgaoJulgador.nome}</p>
+                      </div>
+                    )}
+                    {process?.formato?.nome && (
+                      <div>
+                        <span className="text-blue-700 font-medium">Formato:</span>
+                        <p className="text-blue-600">{process.formato.nome}</p>
+                      </div>
+                    )}
+                    {process?.nivelSigilo !== undefined && (
+                      <div>
+                        <span className="text-blue-700 font-medium">Nível Sigilo:</span>
+                        <p className="text-blue-600">{process.nivelSigilo === 0 ? 'Público' : 'Sigiloso'}</p>
+                      </div>
+                    )}
+                    {process?.valorCausa && (
+                      <div>
+                        <span className="text-blue-700 font-medium">Valor Causa:</span>
+                        <p className="text-blue-600">R$ {process.valorCausa}</p>
+                      </div>
+                    )}
+                    {process?.dataHoraUltimaAtualizacao && (
+                      <div className="md:col-span-2">
+                        <span className="text-blue-700 font-medium">Última Atualização:</span>
+                        <p className="text-blue-600">{new Date(process.dataHoraUltimaAtualizacao).toLocaleString('pt-BR')}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {process?.description && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Descrição</label>
+                  <p className="text-gray-700 bg-gray-50 p-3 rounded">{process.description}</p>
+                </div>
+              )}
             </div>
           )}
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Número do Processo *
-              </label>
-              <input
-                type="text"
-                name="number"
-                value={formData.number}
-                onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                required
-              />
+          {/* ABA: MOVIMENTAÇÕES */}
+          {(isFromDataJud || process?.movimentos?.length > 0) && activeTab === 'movimentos' && (
+            <div className="p-6">
+              {process?.movimentos && process.movimentos.length > 0 ? (
+                <div className="space-y-3">
+                  {process.movimentos.map((movimento, index) => (
+                    <div key={index} className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1">
+                          <p className="font-semibold text-gray-900">
+                            {movimento?.nome}
+                          </p>
+                          {movimento?.complementosTabelados && movimento.complementosTabelados.length > 0 && (
+                            <div className="mt-2 flex flex-wrap gap-1">
+                              {movimento.complementosTabelados.map((comp, idx) => (
+                                <span key={idx} className="bg-blue-100 text-blue-700 px-2 py-1 rounded text-xs">
+                                  {comp.nome || comp}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        <span className="text-gray-500 text-sm ml-4 whitespace-nowrap">
+                          {movimento?.dataHora
+                            ? new Date(movimento.dataHora).toLocaleDateString('pt-BR')
+                            : ''}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  Nenhuma movimentação disponível
+                </div>
+              )}
             </div>
+          )}
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Título *
-              </label>
-              <input
-                type="text"
-                name="title"
-                value={formData.title}
-                onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                required
-              />
+          {/* ABA: ASSUNTOS */}
+          {process?.assuntos?.length > 0 && activeTab === 'assuntos' && (
+            <div className="p-6">
+              {process?.assuntos && process.assuntos.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {process.assuntos.map((assunto, index) => (
+                    <div key={index} className="bg-white border border-gray-200 rounded-lg p-4">
+                      <p className="font-semibold text-gray-900">{assunto.nome}</p>
+                      {assunto.codigo && (
+                        <p className="text-xs text-gray-500 mt-1">Código: {assunto.codigo}</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  Nenhum assunto disponível
+                </div>
+              )}
             </div>
+          )}
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Cliente *
-              </label>
-              <input
-                type="text"
-                name="client"
-                value={formData.client}
-                onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                required
-              />
-            </div>
+          {/* ABA: EDITAR (formulário) */}
+          {(!isFromDataJud || activeTab === 'editar') && (
+            <form onSubmit={handleSubmit} className="p-6 space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Número do Processo *
+                  </label>
+                  <input
+                    type="text"
+                    name="number"
+                    value={formData.number}
+                    onChange={handleChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Tribunal *
-              </label>
-              <input
-                type="text"
-                name="court"
-                value={formData.court}
-                onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                required
-              />
-            </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Título *
+                  </label>
+                  <input
+                    type="text"
+                    name="title"
+                    value={formData.title}
+                    onChange={handleChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Status
-              </label>
-              <select
-                name="status"
-                value={formData.status}
-                onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="Em andamento">Em andamento</option>
-                <option value="Concluído">Concluído</option>
-                <option value="Aguardando">Aguardando</option>
-                <option value="Suspenso">Suspenso</option>
-              </select>
-            </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Cliente *
+                  </label>
+                  <input
+                    type="text"
+                    name="client"
+                    value={formData.client}
+                    onChange={handleChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Prioridade
-              </label>
-              <select
-                name="priority"
-                value={formData.priority}
-                onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="baixa">Baixa</option>
-                <option value="media">Média</option>
-                <option value="alta">Alta</option>
-              </select>
-            </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Tribunal *
+                  </label>
+                  <input
+                    type="text"
+                    name="court"
+                    value={formData.court}
+                    onChange={handleChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Data de Início
-              </label>
-              <input
-                type="date"
-                name="startDate"
-                value={formData.startDate}
-                onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Status
+                  </label>
+                  <select
+                    name="status"
+                    value={formData.status}
+                    onChange={handleChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="Em andamento">Em andamento</option>
+                    <option value="Concluído">Concluído</option>
+                    <option value="Aguardando">Aguardando</option>
+                    <option value="Suspenso">Suspenso</option>
+                  </select>
+                </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Próxima Audiência
-              </label>
-              <input
-                type="date"
-                name="nextHearing"
-                value={formData.nextHearing}
-                onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-          </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Prioridade
+                  </label>
+                  <select
+                    name="priority"
+                    value={formData.priority}
+                    onChange={handleChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="baixa">Baixa</option>
+                    <option value="media">Média</option>
+                    <option value="alta">Alta</option>
+                  </select>
+                </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Descrição
-            </label>
-            <textarea
-              name="description"
-              value={formData.description}
-              onChange={handleChange}
-              rows={4}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Data de Início
+                  </label>
+                  <input
+                    type="date"
+                    name="startDate"
+                    value={formData.startDate}
+                    onChange={handleChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
 
-          <div className="flex justify-end space-x-3 pt-4">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-            >
-              {process ? 'Salvar' : 'Criar'}
-            </button>
-          </div>
-        </form>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Próxima Audiência
+                  </label>
+                  <input
+                    type="date"
+                    name="nextHearing"
+                    value={formData.nextHearing}
+                    onChange={handleChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Descrição
+                </label>
+                <textarea
+                  name="description"
+                  value={formData.description}
+                  onChange={handleChange}
+                  rows={4}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div className="flex justify-end space-x-3 pt-4">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                >
+                  {process ? 'Salvar' : 'Criar'}
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
       </div>
     </div>
   );

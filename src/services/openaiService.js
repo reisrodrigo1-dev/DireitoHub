@@ -1,5 +1,5 @@
 // Serviço para integração com IA
-import { AI_CONFIG } from '../config/aiConfig';
+import { AI_CONFIG, PROMPT_SPECIFIC_CONFIG } from '../config/aiConfig';
 
 const { API_KEY, API_URL, MODEL, MAX_TOKENS, TEMPERATURE } = AI_CONFIG;
 
@@ -954,5 +954,177 @@ const testAPIConnection = async () => {
   } catch (error) {
     console.log('❌ Erro de conectividade:', error.message);
     return false;
+  }
+};
+
+// Função para obter configuração específica do prompt
+const getPromptConfig = (promptType) => {
+  return PROMPT_SPECIFIC_CONFIG[promptType] || {
+    model: MODEL,
+    maxTokens: MAX_TOKENS.REGULAR_CHAT,
+    chunkSize: MAX_TOKENS.REGULAR_CHAT,
+    temperature: TEMPERATURE.REGULAR_CHAT,
+    useRAG: false,
+    chunkingStrategy: 'fixed'
+  };
+};
+
+// Função para gerar embeddings (para RAG)
+const generateEmbedding = async (text) => {
+  const response = await fetch('https://api.openai.com/v1/embeddings', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${API_KEY}`
+    },
+    body: JSON.stringify({
+      model: 'text-embedding-ada-002',
+      input: text
+    })
+  });
+  
+  if (!response.ok) await handleAPIError(response);
+  const data = await response.json();
+  return data.data[0].embedding;
+};
+
+// Função para recuperar chunks relevantes (RAG básico)
+const retrieveRelevantChunks = async (query, promptType) => {
+  const config = getPromptConfig(promptType);
+  if (!config.useRAG) return [];
+  
+  const queryEmbedding = await generateEmbedding(query);
+  // Simulação de busca no Firestore (implemente a lógica real)
+  // Retorne chunks relevantes baseados na similaridade
+  return []; // Placeholder: retorne array de chunks
+};
+
+// Função para dividir texto semanticamente
+const semanticChunkText = (text, maxTokens = 1000) => {
+  // Implementação básica: dividir por parágrafos ou sentenças
+  const sentences = text.split(/[.!?]+/).filter(s => s.trim());
+  const chunks = [];
+  let currentChunk = '';
+  
+  for (const sentence of sentences) {
+    const potential = currentChunk + ' ' + sentence;
+    if (estimateTokens(potential) > maxTokens) {
+      if (currentChunk) chunks.push(currentChunk.trim());
+      currentChunk = sentence;
+    } else {
+      currentChunk = potential;
+    }
+  }
+  if (currentChunk) chunks.push(currentChunk.trim());
+  return chunks;
+};
+
+// Função para gerar resposta grande com múltiplas requisições
+export const generateLargeResponse = async (messages, promptType) => {
+  try {
+    // Obter configuração específica do prompt
+    const config = getPromptConfig(promptType);
+    const NUM_PARTS = config.numberOfParts || 15;
+    const maxTokensPerPart = config.chunkSize || 3500;
+    const totalTokens = config.maxTokens || NUM_PARTS * maxTokensPerPart;
+    
+    console.log(`📊 Iniciando geração de resposta grande (${totalTokens} tokens em ${NUM_PARTS} partes)`);
+    
+    const systemMessage = messages.find(m => m.role === 'system') || { role: 'system', content: '' };
+    const userMessages = messages.filter(m => m.role !== 'system');
+    
+    const results = [];
+    let previousContent = '';
+    
+    for (let i = 1; i <= NUM_PARTS; i++) {
+      console.log(`📝 Gerando parte ${i}/${NUM_PARTS}...`);
+      
+      const partPrompt = i === 1 
+        ? `Comece a gerar o conteúdo completo. Esta é a PARTE 1 de ${NUM_PARTS}.`
+        : `Continúe exatamente de onde parou. Isso é a PARTE ${i} de ${NUM_PARTS}. 
+           
+IMPORTANTE: Não repita o conteúdo anterior. Comece imediatamente com novo conteúdo.
+Conteúdo gerado até agora:
+${previousContent.substring(0, 2000)}...
+
+Continue gerando novo conteúdo a partir daqui.`;
+      
+      const response = await fetch(API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${API_KEY}`
+        },
+        body: JSON.stringify({
+          model: MODEL,
+          messages: [
+            {
+              role: 'system',
+              content: systemMessage.content + `\n\nVocê está gerando uma resposta muito longa e detalhada. ${partPrompt}`
+            },
+            ...userMessages,
+            {
+              role: 'user',
+              content: partPrompt
+            }
+          ],
+          max_tokens: maxTokensPerPart,
+          temperature: config.temperature || 0.6,
+          top_p: 0.95,
+          frequency_penalty: 0.0,
+          presence_penalty: 0.0
+        })
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error(`❌ Erro na parte ${i}:`, errorData);
+        
+        // Se houver erro, retornar o que foi gerado até agora
+        if (results.length > 0) {
+          return {
+            success: true,
+            message: results.join('\n\n'),
+            partsGenerated: results.length,
+            error: `Parado na parte ${i} devido a erro`,
+            usage: { totalTokens: results.length * maxTokensPerPart }
+          };
+        }
+        throw new Error(`Erro ao gerar parte ${i}: ${errorData.error?.message || 'Unknown'}`);
+      }
+      
+      const data = await response.json();
+      const content = data.choices[0]?.message?.content || '';
+      
+      if (content.trim()) {
+        results.push(content);
+        previousContent = content;
+        console.log(`✅ Parte ${i} gerada (${content.length} caracteres)`);
+      } else {
+        console.warn(`⚠️ Parte ${i} retornou vazia, parando geração`);
+        break;
+      }
+      
+      // Pausa entre requisições para evitar rate limiting
+      if (i < NUM_PARTS) {
+        await new Promise(resolve => setTimeout(resolve, 1500));
+      }
+    }
+    
+    const fullContent = results.join('\n\n');
+    
+    return {
+      success: true,
+      message: fullContent,
+      partsGenerated: results.length,
+      totalTokensGenerated: results.length * maxTokensPerPart,
+      usage: { totalTokens: results.length * maxTokensPerPart }
+    };
+  } catch (error) {
+    console.error('❌ Erro em generateLargeResponse:', error);
+    return {
+      success: false,
+      error: error.message || 'Erro ao gerar resumo extenso'
+    };
   }
 };

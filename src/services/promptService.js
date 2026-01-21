@@ -6,6 +6,7 @@ export const loadPromptFiles = async () => {
     const promptFiles = [
       'Corrigir o Português e Deixar mais claro.txt',
       'Projeto de Lei.txt',
+      'Apelacao Criminal.txt',
       'Resumo para clientes.txt',
       'Rebater Argumentos.txt',
       'Busca de Jurisprudência.txt'
@@ -166,7 +167,33 @@ const getWelcomeMessageForPrompt = (fileName) => {
     'Projeto de Lei': 'Bem-vindo ao assistente de Projetos de Lei! Descreva qual lei você deseja elaborar, indicando: o tema, o objetivo, o público-alvo e qualquer detalhe importante. Vou redigir um projeto de lei completo, estruturado e em conformidade com as normas legislativas.',
     'Resumo para clientes': 'Bem-vindo ao Resumo para Clientes! Compartilhe comigo o documento jurídico que deseja resumir (petição, parecer, recurso, etc.). Vou traduzir tudo para uma linguagem clara e acessível, explicando o que foi feito, a situação atual e os próximos passos. Seu cliente entenderá tudo perfeitamente!',
     'Rebater Argumentos': 'Bem-vindo ao assistente de Rebater Argumentos! Compartilhe comigo os argumentos da parte contrária que você precisa refutar. Vou analisar ponto a ponto e elaborar uma contra-argumentação jurídica robusta, técnica e irrefutável, com fundamentação legal precisa. Indique também o foco/tema específico da refutação.',
-    'Busca de Jurisprudência': 'Bem-vindo ao assistente de Busca de Jurisprudência! Descreva o tema jurídico que precisa pesquisar e indique preferência de tribunal. Vou orientá-lo sobre onde buscar nas plataformas oficiais (STF, STJ, TRFs, TJs). Quando encontrar as decisões, compartilhe comigo (copie e cole ou anexe documentos) e vou formatar em 3 resultados com ementa, tribunal, processo e link direto.'
+    'Busca de Jurisprudência': 'Bem-vindo ao assistente de Busca de Jurisprudência! Descreva o tema jurídico que precisa pesquisar e indique preferência de tribunal. Vou orientá-lo sobre onde buscar nas plataformas oficiais (STF, STJ, TRFs, TJs). Quando encontrar as decisões, compartilhe comigo (copie e cole ou anexe documentos) e vou formatar em 3 resultados com ementa, tribunal, processo e link direto.',
+    'Apelacao Criminal': `🔴 **ASSISTENTE DE APELAÇÃO CRIMINAL** 🔴
+
+Bem-vindo ao especialista em Razões de Apelação Criminal
+
+**COMO FUNCIONA:**
+
+Este assistente elabora apelações criminais **rigorosamente técnicas**, analisando a sentença em profundidade e apresentando argumentação robusta em hierarquia de teses.
+
+**O QUE VOCÊ PRECISA FAZER:**
+
+1️⃣ **Envie um PDF** contendo:
+   • A sentença condenatória (completa)
+   • A denúncia original
+   • Os autos do processo (provas documentais relevantes)
+   • Depoimentos das testemunhas (se possível)
+   • Qualquer outro documento importante para análise
+
+2️⃣ **Responda minhas perguntas** sobre:
+   • O acusado e seus dados pessoais
+   • Os crimes imputados e suas circunstâncias
+   • Os principais pontos de contestação
+   • Circunstâncias favoráveis não mencionadas
+
+3️⃣ **Digite "GERAR"** quando tiver enviado todos os documentos e respondido as perguntas
+
+**Comece enviando o PDF da sentença e dos documentos!** 📄`
   };
 
   return welcomeMessages[fileName] || `Bem-vindo ao assistente "${fileName}"! Como posso ajudá-lo?`;
@@ -270,6 +297,7 @@ const getPromptFileName = (promptId) => {
   const fileMapping = {
     'corrigir-o-portugues-e-deixar-mais-claro': 'Corrigir o Português e Deixar mais claro.txt',
     'projeto-de-lei': 'Projeto de Lei.txt',
+    'apelacao-criminal': 'Apelacao Criminal.txt',
     'resumo-para-clientes': 'Resumo para clientes.txt',
     'rebater-argumentos': 'Rebater Argumentos.txt',
     'busca-de-jurisprudencia': 'Busca de Jurisprudência.txt'

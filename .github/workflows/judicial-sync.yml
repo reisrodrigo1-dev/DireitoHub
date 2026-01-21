@@ -1,0 +1,81 @@
+name: Daily Judicial Data Sync
+
+on:
+  schedule:
+    # Runs daily at 8 AM, 2 PM, and 8 PM (São Paulo time = UTC-3)
+    # Using UTC times: 11 AM, 5 PM, 11 PM UTC
+    - cron: '0 11,17,23 * * *'
+  
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Check Firestore quota
+        id: quota_check
+        run: node api/monitoring/check-quota.js
+        env:
+          FIREBASE_ADMIN_KEY: ${{ secrets.FIREBASE_ADMIN_KEY }}
+          FIREBASE_ADMIN_DB_URL: ${{ secrets.FIREBASE_ADMIN_DB_URL }}
+        continue-on-error: true
+      
+      - name: Abort if quota exceeded
+        if: steps.quota_check.outputs.quota_status == 'EXCEEDED'
+        run: |
+          echo "❌ Quota exceeded, aborting sync"
+          exit 1
+      
+      - name: Sync TJSP (São Paulo)
+        run: node api/cron/sync-tribunal.js TJSP
+        env:
+          DATAJUD_API_KEY: ${{ secrets.DATAJUD_API_KEY }}
+          FIREBASE_ADMIN_KEY: ${{ secrets.FIREBASE_ADMIN_KEY }}
+          FIREBASE_ADMIN_DB_URL: ${{ secrets.FIREBASE_ADMIN_DB_URL }}
+        continue-on-error: true
+      
+      - name: Sync TJRJ (Rio de Janeiro)
+        run: node api/cron/sync-tribunal.js TJRJ
+        env:
+          DATAJUD_API_KEY: ${{ secrets.DATAJUD_API_KEY }}
+          FIREBASE_ADMIN_KEY: ${{ secrets.FIREBASE_ADMIN_KEY }}
+          FIREBASE_ADMIN_DB_URL: ${{ secrets.FIREBASE_ADMIN_DB_URL }}
+        continue-on-error: true
+      
+      - name: Sync TJMG (Minas Gerais)
+        run: node api/cron/sync-tribunal.js TJMG
+        env:
+          DATAJUD_API_KEY: ${{ secrets.DATAJUD_API_KEY }}
+          FIREBASE_ADMIN_KEY: ${{ secrets.FIREBASE_ADMIN_KEY }}
+          FIREBASE_ADMIN_DB_URL: ${{ secrets.FIREBASE_ADMIN_DB_URL }}
+        continue-on-error: true
+      
+      - name: Generate sync report
+        if: always()
+        run: node api/monitoring/generate-report.js
+        env:
+          FIREBASE_ADMIN_KEY: ${{ secrets.FIREBASE_ADMIN_KEY }}
+          FIREBASE_ADMIN_DB_URL: ${{ secrets.FIREBASE_ADMIN_DB_URL }}
+        continue-on-error: true
+      
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: sync-logs
+          path: sync-*.log
+        continue-on-error: true

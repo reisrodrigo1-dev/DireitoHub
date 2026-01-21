@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { sendMessageToAI, generateFirstQuestion, generateNextQuestion, generateFinalResult, validateUserInput } from '../services/openaiService';
+import { sendMessageToAI, generateFirstQuestion, generateNextQuestion, generateFinalResult, validateUserInput, generateLargeResponse } from '../services/openaiService';
 import { generateSimpleFinalResult } from '../services/simpleFallbackService';
 import { loadPromptContent, getWelcomeMessage } from '../services/promptService';
 import { chatStorageService } from '../services/chatStorageService';
@@ -7,6 +7,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { promptRequiresDocument, promptCanBenefitFromDocument, generateDocumentRequestMessage, generateInitialDocumentMessage } from '../services/documentService';
 import { replicaWorkflowService, shouldUseReplicaWorkflow } from '../services/replicaWorkflowService';
 import { handleReplicaWorkflowWithFallback } from '../services/replicaFallbackPatch';
+import { analyzeDocument, generateQuestionsForMissingInfo, hasEnoughInfoToGenerate, generateDocumentSummary, generateDocumentAnalysisMessage, validateSufficientInfo } from '../services/documentAnalysisService';
 import DocumentUpload from './DocumentUpload';
 import AttachedDocument from './AttachedDocument';
 
@@ -56,6 +57,11 @@ const ChatInterface = ({ promptType, onBack, onClose, existingChat = null, onBac
   const [isReplicaWorkflow, setIsReplicaWorkflow] = useState(false);
   const [replicaState, setReplicaState] = useState(null);
   const [replicaPhase, setReplicaPhase] = useState('init'); // 'init', 'document_upload', 'section_work', 'completion'
+  
+  // Estados para análise inteligente de documentos
+  const [documentAnalysis, setDocumentAnalysis] = useState(null);
+  const [missingInfoQuestions, setMissingInfoQuestions] = useState([]);
+  const [questionsAnswered, setQuestionsAnswered] = useState({});
   
   const messagesEndRef = useRef(null);
   const { user } = useAuth();
@@ -879,8 +885,22 @@ const ChatInterface = ({ promptType, onBack, onClose, existingChat = null, onBac
         });
         
         // Para prompts simples como "Corrigir o Português", usar chat direto
-        if (!isReplicaWorkflow && conversationPhase === 'questioning') {
-          console.log('💬 Usando chat direto para prompt simples');
+        // EXCLUIR: 'projeto-de-lei', 'apelacao-criminal' (usam fluxo estruturado para geração grande)
+        const simpleDirectChatPrompts = [
+          'corrigir-portugues',
+          'corrigir-o-portugues-deixar-claro',
+          'corrigir-o-portugues-mantendo-escrita',
+          'linguagem-simples',
+          'busca-jurisprudencia',
+          'inserir-fundamentos-legais'
+        ];
+        
+        const useDirectChat = !isReplicaWorkflow && 
+          conversationPhase === 'questioning' &&
+          simpleDirectChatPrompts.some(p => promptType?.id?.includes(p));
+        
+        if (useDirectChat) {
+          console.log('💬 Usando chat direto para prompt simples:', promptType?.id);
           console.log('📋 Conteúdo do prompt:', {
             loaded: !!promptContent,
             length: promptContent?.length || 0,
@@ -937,7 +957,13 @@ const ChatInterface = ({ promptType, onBack, onClose, existingChat = null, onBac
               documentsCount: attachedDocuments.length
             });
             
-            response = await sendMessageToAI(aiMessages);
+            // Verificar se é prompt que requer geração grande (múltiplas partes)
+            if (promptType?.id === 'resumo-para-clientes' || promptType?.id === 'projeto-de-lei' || promptType?.id === 'apelacao-criminal') {
+              console.log(`📊 Usando geração de resposta grande para ${promptType?.id}...`);
+              response = await generateLargeResponse(aiMessages, promptType.id);
+            } else {
+              response = await sendMessageToAI(aiMessages);
+            }
             
             if (response.success) {
               console.log('✅ Resposta da IA recebida com sucesso');
@@ -952,12 +978,81 @@ const ChatInterface = ({ promptType, onBack, onClose, existingChat = null, onBac
             };
           }
         } else {
-          // FLUXO NORMAL: Chat direto com IA
-          if (conversationPhase === 'questioning') {
+          // FLUXO NORMAL: Chat estruturado com perguntas
+          
+          // PRIMEIRO: Verificar se é comando "GERAR" (antes de qualquer validação)
+          if (userMessage.content.toUpperCase().trim() === 'GERAR') {
+            console.log('🎯 Comando GERAR detectado! ConversationPhase:', conversationPhase);
+            
+            if (conversationPhase === 'questioning') {
+              // Verificar se há informações suficientes analisando o documento
+              if (documentAnalysis) {
+                const validation = validateSufficientInfo(documentAnalysis, documentAnalysis.missingInfo);
+                
+                if (!validation.sufficient) {
+                  response = {
+                    success: true,
+                    message: `⚠️ Faltam informações críticas para gerar a apelação:\n\n${validation.missing
+                      .map(m => `• ${m.description}`)
+                      .join('\n')}\n\nPor favor, complete essas informações primeiro.`
+                  };
+                } else {
+                  // Tem informações suficientes
+                  setConversationPhase('ready');
+                }
+              } else {
+                response = {
+                  success: true,
+                  message: '⚠️ Por favor, anexe o documento da sentença primeiro para que eu possa analisar e gerar a apelação.'
+                };
+              }
+            }
+            
+            if (conversationPhase === 'ready') {
+              // Tem todas as informações, gerar resultado
+              try {
+                console.log('🤖 Gerando apelação criminal com 150k tokens...');
+                
+                // Para apelação criminal, usar geração grande sempre
+                response = await generateLargeResponse(
+                  [
+                    {
+                      role: 'system',
+                      content: promptContent
+                    },
+                    ...messages.map(msg => ({
+                      role: msg.role,
+                      content: msg.content
+                    }))
+                  ],
+                  promptType.id
+                );
+                
+                if (response.success) {
+                  setConversationPhase('generating');
+                }
+              } catch (error) {
+                console.error('❌ Erro ao gerar resultado:', error);
+                response = {
+                  success: false,
+                  message: `Erro ao gerar resultado: ${error.message}`
+                };
+              }
+            } else if (conversationPhase !== 'questioning') {
+              response = {
+                success: true,
+                message: '❌ Comando não reconhecido nesta fase'
+              };
+            }
+          } else if (conversationPhase === 'questioning') {
             // Validar resposta do usuário
             const validation = await validateUserInput(userMessage.content, promptContent);
             
-            if (validation.isValid) {
+            // Se tem documento anexado, flexibilizar validação para respostas curtas
+            const hasDocumentAttached = attachedDocuments.length > 0;
+            const isValidForDocumentFlow = hasDocumentAttached && userMessage.content.trim().length > 5;
+            
+            if (validation.isValid || isValidForDocumentFlow) {
               // Adicionar dado coletado
               const newCollectedData = [...collectedData, {
                 question: messages[messages.length - 1]?.content || '',
@@ -965,12 +1060,30 @@ const ChatInterface = ({ promptType, onBack, onClose, existingChat = null, onBac
                 timestamp: new Date()
               }];
               setCollectedData(newCollectedData);
+
+              // Rastrear respostas a perguntas de análise
+              if (missingInfoQuestions.length > 0) {
+                const currentQuestionIndex = Object.keys(questionsAnswered).length;
+                if (currentQuestionIndex < missingInfoQuestions.length) {
+                  const currentQuestion = missingInfoQuestions[currentQuestionIndex];
+                  setQuestionsAnswered(prev => ({
+                    ...prev,
+                    [currentQuestion.field]: userMessage.content
+                  }));
+                }
+              }
               
               // Gerar próxima pergunta incluindo contexto dos documentos
               response = await generateNextQuestion(promptType, promptContent, newCollectedData, messages, attachedDocuments);
               
               if (response.success) {
-                if (response.isComplete) {
+                // Verificar se a resposta indica que tem todas as informações (por texto)
+                const responseText = response.message.toLowerCase();
+                const isReadyKeywords = /tenho todas as informações|informações suficientes|posso gerar|pode gerar|estou pronto/i;
+                const hasReadyKeywords = isReadyKeywords.test(responseText);
+                
+                if (response.isComplete || hasReadyKeywords) {
+                  console.log('✅ Marcando como ready - isComplete:', response.isComplete, 'Keywords:', hasReadyKeywords);
                   setConversationPhase('ready');
                 } else {
                   setCurrentQuestionIndex(prev => prev + 1);
@@ -989,31 +1102,6 @@ const ChatInterface = ({ promptType, onBack, onClose, existingChat = null, onBac
                 message: `${validation.error || validation.message || 'Resposta inválida'}
 
 Por favor, reformule sua resposta de forma mais clara e detalhada.`,
-                isComplete: false
-              };
-            }
-          } else if (conversationPhase === 'ready') {
-            // Verificar se usuário digitou "GERAR"
-            if (userMessage.content.toUpperCase() === 'GERAR') {
-              try {
-                console.log('🤖 Gerando resultado final com OpenAI...');
-                response = await generateFinalResult(promptType, promptContent, collectedData, messages, attachedDocuments);
-                
-                if (response.success && response.message) {
-                  console.log('✅ Resultado gerado com sucesso!');
-                  setConversationPhase('completed');
-                } else {
-                  throw new Error('Resposta da IA inválida');
-                }
-              } catch (error) {
-                console.warn('⚠️ Erro ao usar IA, usando fallback:', error.message);
-                response = await generateSimpleFinalResult(promptType, collectedData);
-                setConversationPhase('completed');
-              }
-            } else {
-              response = {
-                success: true,
-                message: 'Para gerar o resultado final, digite exatamente "GERAR" (sem aspas).',
                 isComplete: false
               };
             }
@@ -1164,7 +1252,7 @@ Este documento foi gerado automaticamente pelo sistema DireitoHub.
   };
 
   // Função para processar documento anexado
-  const handleDocumentProcessed = (documentData) => {
+  const handleDocumentProcessed = async (documentData) => {
     if (documentData.error) {
       // Mostrar erro como mensagem do assistente
       const errorMessage = {
@@ -1172,7 +1260,7 @@ Este documento foi gerado automaticamente pelo sistema DireitoHub.
         role: 'assistant',
         content: `❌ **Erro ao processar documento**: ${documentData.error}
 
-Por favor, tente novamente com um arquivo válido (.txt ou .docx, máximo 10MB).`,
+Por favor, tente novamente com um arquivo válido (.txt ou .docx, máximo 25MB).`,
         timestamp: new Date(),
         isError: true
       };
@@ -1184,8 +1272,8 @@ Por favor, tente novamente com um arquivo válido (.txt ou .docx, máximo 10MB).
     // Adicionar documento à lista de anexados
     const newDocument = {
       id: Date.now(),
-      name: documentData.fileName, // Compatibilidade: usar 'name' como propriedade principal
-      fileName: documentData.fileName, // Manter para compatibilidade
+      name: documentData.fileName,
+      fileName: documentData.fileName,
       content: documentData.content,
       fileSize: documentData.fileSize,
       fileType: documentData.fileType,
@@ -1199,32 +1287,123 @@ Por favor, tente novamente com um arquivo válido (.txt ou .docx, máximo 10MB).
 
     // Mensagem de confirmação
     const totalDocuments = attachedDocuments.length + 1;
+    const isApelacaoCriminal = promptType?.id === 'apelacao-criminal';
+    const requiredDocuments = isApelacaoCriminal ? 2 : 1;
+    
     const confirmationMessage = {
       id: Date.now() + 1,
       role: 'assistant',
       content: `✅ **Documento anexado com sucesso!**
 
-📄 **${documentData.fileName}** (Documento ${totalDocuments})
+📄 **${documentData.fileName}** (Documento ${totalDocuments}${isApelacaoCriminal ? `/${requiredDocuments}` : ''})
 - Tamanho: ${(documentData.fileSize / 1024).toFixed(1)} KB
 - Palavras: ${documentData.wordCount}
 - Tipo: ${documentData.fileType.toUpperCase()}
 
-${totalDocuments > 1 ? 
+${isApelacaoCriminal && totalDocuments < requiredDocuments ? 
+  `📋 **Aguardando documento complementar:**\n\nPor favor, anexe o segundo documento (${totalDocuments === 1 ? 'Inquérito Policial' : 'Processo'}) para que eu possa fazer uma análise completa.` :
+  totalDocuments > 1 ? 
   `📚 **Total de documentos anexados: ${totalDocuments}**\n\nTodos os documentos serão analisados em conjunto pela IA para gerar uma resposta mais completa e fundamentada.` :
-  `Agora posso analisar o conteúdo do documento.`
-}
-
-${isReplicaWorkflow ? 
-  'Para prosseguir com a elaboração da réplica, confirme digitando "SIM" ou anexe mais documentos se necessário.' :
-  'Prossiga com suas perguntas ou digite "GERAR" quando estiver pronto para o resultado final.'
+  `🔍 Analisando conteúdo do documento...`
 }`,
       timestamp: new Date(),
       isDocumentConfirmation: true
     };
 
+    // Mensagem intermediária quando recebe o 2º documento
+    if (isApelacaoCriminal && totalDocuments === 2) {
+      const combinedMessage = {
+        id: Date.now() + 1.5,
+        role: 'assistant',
+        content: `🎉 **Documentos completos!**\n\n📋 Tenho agora:\n  • Documento 1: ${attachedDocuments[0]?.name || 'Documento 1'}\n  • Documento 2: ${documentData.fileName}\n\n🔍 Analisando ambos os documentos em conjunto para extrair todas as informações necessárias...`,
+        timestamp: new Date(),
+        isDocumentInfo: true
+      };
+
+      setMessages(prev => [...prev, combinedMessage]);
+    }
+
     setMessages(prev => [...prev, confirmationMessage]);
 
-    // Salvar progresso se usuário autenticado
+    // Se é apelação criminal e ainda não tem 2 documentos, não fazer análise ainda
+    if (isApelacaoCriminal && totalDocuments < requiredDocuments) {
+      // Salvar progresso e aguardar próximo documento
+      if (user && currentChatId && !currentChatId.startsWith('offline-')) {
+        const updatedMessages = [...messages, confirmationMessage];
+        chatStorageService.saveProgress(
+          currentChatId,
+          updatedMessages,
+          collectedData,
+          conversationPhase,
+          [...attachedDocuments, newDocument]
+        ).catch(error => {
+          console.warn('Erro ao salvar progresso com documento:', error);
+        });
+      }
+      return;
+    }
+
+    // Analisar documento(s) para extrair informações
+    try {
+      console.log('📊 Iniciando análise dos documentos...');
+      
+      // Se tem múltiplos documentos, combinar conteúdo
+      const combinedContent = [...attachedDocuments, newDocument]
+        .map(doc => `\n--- ${doc.fileName} ---\n${doc.content}`)
+        .join('\n');
+      
+      // Se apelação criminal, fazer análise combinada de ambos os docs
+      const analysis = await analyzeDocument(
+        combinedContent, 
+        promptType?.id || 'apelacao-criminal'
+      );
+      
+      console.log('✅ Análise concluída:', analysis);
+      setDocumentAnalysis(analysis);
+
+      // Gerar perguntas para informações faltantes
+      if (analysis.missingInfo && analysis.missingInfo.length > 0) {
+        const questions = generateQuestionsForMissingInfo(analysis.missingInfo, promptType?.id || 'apelacao-criminal');
+        setMissingInfoQuestions(questions);
+
+        // Usar nova função para gerar mensagem de análise
+        const analysisMessage = {
+          id: Date.now() + 2,
+          role: 'assistant',
+          content: generateDocumentAnalysisMessage(analysis, questions),
+          timestamp: new Date(),
+          isQuestion: true
+        };
+
+        setMessages(prev => [...prev, analysisMessage]);
+      } else {
+        // Se tiver todas as informações
+        const readyMessage = {
+          id: Date.now() + 2,
+          role: 'assistant',
+          content: `✅ **Excelente!**\n\nAnalisei todos os documentos e encontrei todas as informações necessárias. Agora estou pronto para gerar a apelação.\n\n📝 **Digite "GERAR"** quando quiser que eu elabore as razões de apelação com 150 mil tokens.`,
+          timestamp: new Date(),
+          isReady: true
+        };
+
+        setMessages(prev => [...prev, readyMessage]);
+        setConversationPhase('ready');
+      }
+    } catch (error) {
+      console.error('❌ Erro ao analisar documento:', error);
+      
+      // Se análise falhar, permitir continuar mesmo assim
+      const continueMessage = {
+        id: Date.now() + 2,
+        role: 'assistant',
+        content: `⚠️ Não consegui analisar automaticamente o documento, mas tudo bem! Vamos continuar de forma tradicional.\n\nProssiga com suas perguntas ou digite "GERAR" quando estiver pronto para o resultado final.`,
+        timestamp: new Date()
+      };
+
+      setMessages(prev => [...prev, continueMessage]);
+    }
+
+    // Salvar progresso
     if (user && currentChatId && !currentChatId.startsWith('offline-')) {
       const updatedMessages = [...messages, confirmationMessage];
       chatStorageService.saveProgress(

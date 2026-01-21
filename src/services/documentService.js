@@ -113,10 +113,10 @@ export const processDocument = async (file) => {
   }
 
   const fileExtension = file.name.toLowerCase().split('.').pop();
-  const maxSize = 10 * 1024 * 1024; // 10MB
+  const maxSize = 25 * 1024 * 1024; // 25MB
 
   if (file.size > maxSize) {
-    throw new Error('Arquivo muito grande. Tamanho máximo: 10MB');
+    throw new Error('Arquivo muito grande. Tamanho máximo: 25MB');
   }
 
   let content = '';
