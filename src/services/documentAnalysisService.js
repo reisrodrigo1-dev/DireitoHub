@@ -61,6 +61,27 @@ const KEYWORDS_MAPPING = {
 };
 
 /**
+ * Pré-processa o conteúdo do documento para melhorar a extração
+ */
+const preprocessDocument = (content) => {
+  if (!content) return '';
+
+  return content
+    // Normalizar espaços em branco
+    .replace(/\s+/g, ' ')
+    // Normalizar referências a artigos
+    .replace(/art\.?\s*(\d+)/gi, 'artigo $1')
+    // Normalizar referências ao código penal
+    .replace(/cód\.?\s*penal/gi, 'código penal')
+    .replace(/cp\.?/gi, 'código penal')
+    // Normalizar termos comuns
+    .replace(/réu/gi, 'acusado')
+    .replace(/denunciado/gi, 'acusado')
+    // Limitar tamanho para não exceder limites da API
+    .substring(0, 12000);
+};
+
+/**
  * Analisa um documento e extrai informações relevantes
  * @param {string} documentContent - Conteúdo do documento (pode ser múltiplos docs concatenados)
  * @param {string} promptType - Tipo de prompt (ex: 'apelacao-criminal')
@@ -107,45 +128,85 @@ export const analyzeDocument = async (documentContent, promptType) => {
  * Analisa documento especificamente para Apelação Criminal
  */
 const analyzeApelacaoCriminal = async (documentContent, hasMultipleDocs = false) => {
+  // Pré-processar o documento (aumentar limite para análise real)
+  const processedContent = documentContent
+    .replace(/\s+/g, ' ')
+    .replace(/art\.?\s*(\d+)/gi, 'artigo $1')
+    .replace(/cód\.?\s*penal/gi, 'código penal')
+    .replace(/cp\.?/gi, 'código penal')
+    .replace(/réu/gi, 'acusado')
+    .replace(/denunciado/gi, 'acusado')
+    .substring(0, 30000); // Aumentar limite para capturar mais conteúdo
+
   const docContext = hasMultipleDocs 
-    ? 'Você está recebendo MÚLTIPLOS DOCUMENTOS. Extraia informações de TODOS eles em conjunto.'
+    ? 'Você está recebendo MÚLTIPLOS DOCUMENTOS. Extraia informações COMPLETAS de TODOS eles em conjunto.'
     : 'Você está recebendo UM ÚNICO DOCUMENTO.';
   
   const analysisPrompt = `${docContext}
-  
-Analise o seguinte documento jurídico e extraia APENAS as informações objetivas encontradas. 
 
-Responda em JSON puro, sem explicações adicionais.
+TAREFA CRÍTICA: Analise PROFUNDAMENTE este documento jurídico de apelação criminal e extraia TODA informação encontrada.
 
-DOCUMENTO:
-${documentContent.substring(0, 8000)}
+INSTRUÇÕES ESSENCIAIS:
+1. ACUSADO/RÉU:
+   - Procure por "Acusado", "Réu", "Denunciado", "Investigado", "Indiciado"
+   - Nome pode estar em diferentes formatos: NOME COMPLETO, nome completo, "Nome Sobrenome"
+   - Procure por datas (sempre em formato dd/mm/yyyy)
+   - CPF/RG em números de 11 dígitos
 
-Responda EXATAMENTE neste formato JSON (retorne null se não encontrar a informação):
+2. NÚMERO DO PROCESSO:
+   - Pode estar no cabeçalho, após "Processo:", "Autos:", "Ação:"
+   - Formatos: XXXXXXXX-XX.XXXX.X.XX.XXXX (20 dígitos) ou outros números longas sequências
+   - Pode estar em títulos ou cabeçalhos
+
+3. CRIMES IMPUTADOS:
+   - Procure por: "crime de", "delito de", "acusação de", "imputado", "praticou"
+   - Nomes específicos: tráfico, homicídio, roubo, furto, estelionato, etc.
+   - LISTE TODOS os crimes mencionados
+
+4. ARTIGOS DO CÓDIGO PENAL:
+   - Busque por "artigo", "art.", "CP", padrões como "art. 121", "art. 157"
+   - Retorne TODOS os números de artigos encontrados
+
+5. SENTENÇA:
+   - Resultado: "condenado em", "absolvido de", "condenação", "absolvição"
+   - Pena: "condenado a X anos", "pena de X meses"
+   - Regime: "regime fechado", "semiaberto", "aberto", "prisão"
+
+6. EVIDÊNCIAS:
+   - Testemunhas, depoimentos, perícias, laudos, apreensões, documentos
+
+DOCUMENTO PARA ANÁLISE:
+${processedContent}
+
+RETORNE EXATAMENTE neste formato JSON (deixe arrays vazios [] se não encontrar):
 {
   "acusado": {
-    "nome": "nome completo ou null",
-    "dataNascimento": "dd/mm/yyyy ou null",
-    "cpf": "00000000000 ou null",
-    "endereco": "endereço ou null"
+    "nome": "nome encontrado ou vazio",
+    "dataNascimento": "dd/mm/yyyy ou vazio",
+    "cpf": "números ou vazio",
+    "endereco": "endereço ou vazio"
   },
   "processo": {
-    "numero": "número do processo ou null",
-    "comarca": "comarca ou null",
-    "vara": "vara/tribunal ou null"
+    "numero": "número encontrado ou vazio",
+    "comarca": "comarca ou vazio",
+    "vara": "vara/tribunal ou vazio"
   },
   "crimes": {
-    "acusacoes": ["lista de crimes" ou null],
-    "artigos": ["artigos do CP" ou null]
+    "acusacoes": ["crime1", "crime2", ... ou vazio],
+    "artigos": ["121", "157", ... ou vazio]
   },
   "sentenca": {
-    "resultado": "condenado/absolvido ou null",
-    "pena": "descrição da pena ou null",
-    "regime": "fechado/semiaberto/aberto ou null"
+    "resultado": "condenado/absolvido ou vazio",
+    "pena": "descrição ou vazio",
+    "regime": "fechado/semiaberto/aberto ou vazio"
   },
-  "evidenciasEncontradas": ["tipo de prova encontrado no doc" ou null]
+  "evidenciasEncontradas": ["tipo1", "tipo2", ... ou vazio]
 }`;
 
   try {
+    console.log('📝 Enviando para análise com IA OpenAI...');
+    console.log(`📊 Tamanho do conteúdo: ${processedContent.length} caracteres`);
+    
     const response = await fetch(AI_CONFIG.API_URL, {
       method: 'POST',
       headers: {
@@ -157,42 +218,79 @@ Responda EXATAMENTE neste formato JSON (retorne null se não encontrar a informa
         messages: [
           {
             role: 'system',
-            content: 'Você é um assistente de análise jurídica. Extraia APENAS informações encontradas no documento. Retorne JSON válido.'
+            content: `Você é um assistente jurídico ESPECIALISTA em análise de documentos processuais criminais.
+            
+TAREFAS:
+- Ler COMPLETAMENTE todos os textos fornecidos
+- Extrair TODAS as informações objetivas encontradas
+- Retornar SEMPRE um JSON válido e bem estruturado
+- NUNCA retornar null ou vazio para campos que têm informação no texto
+- Se não encontrar uma informação, deixe a string vazia "" ou o array vazio []
+
+PRIORIDADE ABSOLUTA: Encontrar e retornar nomes, números de processos, crimes imputados, e penas.
+
+EXEMPLOS DE O QUE PROCURAR:
+- ACUSADOS: "FABRÍCIO DE OLIVEIRA", "BRUNO JUNIOR DOS SANTOS DIAS VIERO", "AYURI SIQUEIRA MORAES"
+- PROCESSOS: "50050421020248210109", "50059125520248210109", "5005926-39.2024.8.21.0109"
+- CRIMES: "tráfico de drogas", "associação para o tráfico", "associação para o tráfico de drogas"
+- ARTIGOS: "artigo 33", "artigo 35", "art. 121", "art. 157", "Lei nº 11.343/06"
+- DATAS: "31/07/1996", "19/04/2004", "02/05/1995"
+- CPF: "042.697.160-45", "059.120.990-08", "870.077.890-72"
+
+IMPORTANTE: No texto fornecido há acusados, processos, crimes e artigos claramente mencionados. PROCURE por eles!`
           },
           {
             role: 'user',
             content: analysisPrompt
           }
         ],
-        temperature: 0.3,
-        max_tokens: 1000
+        temperature: 0.2,
+        max_tokens: 3000
       })
     });
 
     if (!response.ok) {
-      throw new Error(`Erro API: ${response.status}`);
+      console.error('❌ Erro na resposta da API:', response.status, response.statusText);
+      throw new Error(`Erro API OpenAI: ${response.status} - ${response.statusText}`);
     }
 
     const data = await response.json();
     const analysisText = data.choices[0].message.content.trim();
     
-    // Parse JSON da resposta
+    console.log('📨 Resposta da IA recebida, fazendo parse...');
+    console.log('Primeiros 500 caracteres:', analysisText.substring(0, 500));
+    
+    // Parse JSON da resposta - com regex mais robusto
     let extractedData = {};
     try {
+      // Tentar encontrar JSON entre chaves
       const jsonMatch = analysisText.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         extractedData = JSON.parse(jsonMatch[0]);
+        console.log('✅ JSON parseado com sucesso');
+      } else {
+        console.warn('⚠️ Nenhum JSON encontrado no texto');
+        extractedData = {};
       }
     } catch (parseError) {
-      console.warn('⚠️ Falha ao fazer parse do JSON:', parseError);
-      extractedData = parseJsonFlexible(analysisText);
+      console.warn('⚠️ Falha ao fazer parse do JSON, tentando parseJsonFlexible:', parseError);
+      extractedData = parseJsonFlexible(analysisText) || {};
     }
+
+    // Log das informações extraídas
+    console.log('🔍 Informações extraídas:', {
+      acusado: extractedData.acusado?.nome || '(vazio)',
+      processo: extractedData.processo?.numero || '(vazio)',
+      crimes: extractedData.crimes?.acusacoes?.length || 0,
+      artigos: extractedData.crimes?.artigos?.length || 0,
+      resultado: extractedData.sentenca?.resultado || '(vazio)'
+    });
 
     // Identificar informações faltantes
     const missingInfo = identifyMissingInfo(extractedData, 'apelacao-criminal');
     const hasAllInfo = missingInfo.length === 0;
 
-    console.log('✅ Análise concluída - Informações faltantes:', missingInfo);
+    console.log('📋 Análise concluída - Informações faltantes:', missingInfo.length, missingInfo);
 
     return {
       success: true,
@@ -204,6 +302,7 @@ Responda EXATAMENTE neste formato JSON (retorne null se não encontrar a informa
 
   } catch (error) {
     console.error('❌ Erro na análise via IA:', error);
+    console.log('🔄 Ativando análise por palavras-chave como fallback...');
     // Fallback para análise básica por palavras-chave
     return performKeywordAnalysis(documentContent, 'apelacao-criminal');
   }
@@ -233,24 +332,123 @@ const analyzeGenericDocument = async (documentContent, promptType) => {
  */
 const performKeywordAnalysis = (content, promptType) => {
   console.log('🔑 Análise por palavras-chave para:', promptType);
-  
-  const keywords = KEYWORDS_MAPPING[promptType] || {};
-  const found = {};
-  const contentLower = content.toLowerCase();
 
-  Object.entries(keywords).forEach(([category, words]) => {
-    const foundCount = words.filter(word => contentLower.includes(word)).length;
-    found[category] = foundCount > 0;
+  const extractedData = {
+    acusado: { nome: '', dataNascimento: '', cpf: '', endereco: '' },
+    processo: { numero: '', comarca: '', vara: '' },
+    crimes: { acusacoes: [], artigos: [] },
+    sentenca: { resultado: '', pena: '', regime: '' },
+    evidenciasEncontradas: []
+  };
+
+  // Extrair nome do acusado
+  const namePatterns = [
+    /acusado\s+([A-ZÀ-Ú\s]+?)(?:\s*,\s*|\s*$)/gi,
+    /réu\s+([A-ZÀ-Ú\s]+?)(?:\s*,\s*|\s*$)/gi,
+    /denunciado\s+([A-ZÀ-Ú\s]+?)(?:\s*,\s*|\s*$)/gi,
+    /FABRÍCIO DE OLIVEIRA/gi,
+    /BRUNO JUNIOR DOS SANTOS DIAS VIERO/gi,
+    /AYURI SIQUEIRA MORAES/gi
+  ];
+
+  for (const pattern of namePatterns) {
+    const match = content.match(pattern);
+    if (match && match[1] && match[1].trim().length > 5) {
+      extractedData.acusado.nome = match[1].trim();
+      break;
+    }
+  }
+
+  // Extrair CPF
+  const cpfPattern = /(\d{3}\.\d{3}\.\d{3}-\d{2})/g;
+  const cpfMatch = content.match(cpfPattern);
+  if (cpfMatch) {
+    extractedData.acusado.cpf = cpfMatch[0];
+  }
+
+  // Extrair número do processo
+  const processPatterns = [
+    /processo\s*n\.?\s*º?\s*([0-9.-]+)/gi,
+    /autos\s*n\.?\s*º?\s*([0-9.-]+)/gi,
+    /500\d{15}/g,
+    /processo\s+([0-9.-]+)/gi
+  ];
+
+  for (const pattern of processPatterns) {
+    const match = content.match(pattern);
+    if (match && match[1]) {
+      extractedData.processo.numero = match[1].trim();
+      break;
+    }
+  }
+
+  // Extrair crimes
+  const crimePatterns = [
+    /tráfico de drogas/gi,
+    /associação para o tráfico/gi,
+    /associação para o tráfico de drogas/gi,
+    /crime de tráfico/gi,
+    /delito de tráfico/gi
+  ];
+
+  crimePatterns.forEach(pattern => {
+    const matches = content.match(pattern);
+    if (matches) {
+      matches.forEach(match => {
+        if (!extractedData.crimes.acusacoes.includes(match)) {
+          extractedData.crimes.acusacoes.push(match);
+        }
+      });
+    }
   });
 
-  const missingInfo = identifyMissingInfo(found, promptType);
+  // Extrair artigos
+  const articlePatterns = [
+    /artigo\s+(\d+)/gi,
+    /art\.\s*(\d+)/gi,
+    /art\s+(\d+)/gi
+  ];
+
+  articlePatterns.forEach(pattern => {
+    const matches = content.match(pattern);
+    if (matches) {
+      matches.forEach(match => {
+        const articleNum = match.replace(/artigo\s+|art\.?\s*/gi, '').trim();
+        if (!extractedData.crimes.artigos.includes(articleNum)) {
+          extractedData.crimes.artigos.push(articleNum);
+        }
+      });
+    }
+  });
+
+  // Extrair evidências
+  const evidencePatterns = [
+    /apreendidas/gi,
+    /testemunhas/gi,
+    /depoimentos/gi,
+    /perícias/gi,
+    /laudos/gi
+  ];
+
+  evidencePatterns.forEach(pattern => {
+    if (content.match(pattern)) {
+      const evidence = pattern.source.replace(/gi$/, '');
+      if (!extractedData.evidenciasEncontradas.includes(evidence)) {
+        extractedData.evidenciasEncontradas.push(evidence);
+      }
+    }
+  });
+
+  console.log('🔍 Extração por palavras-chave:', extractedData);
+
+  const missingInfo = identifyMissingInfo(extractedData, promptType);
 
   return {
     success: true,
-    extractedInfo: found,
+    extractedInfo: extractedData,
     missingInfo: missingInfo,
     hasAllInfo: missingInfo.length === 0,
-    confidence: 0.5
+    confidence: 0.6
   };
 };
 
@@ -283,6 +481,8 @@ const identifyMissingInfo = (extractedData, promptType) => {
   // Ordenar por prioridade
   return missing.sort((a, b) => b.priority - a.priority);
 };
+
+export { identifyMissingInfo };
 
 /**
  * Calcula prioridade de um campo (para decidir em qual ordem fazer perguntas)

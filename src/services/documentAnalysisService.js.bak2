@@ -1,0 +1,968 @@
+// Serviço para análise inteligente de documentos e extração de informações
+import { AI_CONFIG } from '../config/aiConfig.js';
+
+// Estrutura de informações esperadas por tipo de prompt
+const REQUIRED_INFORMATION = {
+  'apelacao-criminal': {
+    acusado: {
+      nome: 'Nome completo do acusado',
+      dataNascimento: 'Data de nascimento',
+      cpf: 'CPF/RG',
+      endereco: 'Endereço'
+    },
+    processo: {
+      numeroProcesso: 'Número do processo',
+      comarca: 'Comarca/Tribunal',
+      juiz: 'Juiz responsável'
+    },
+    crimes: {
+      acusacoes: 'Crimes imputados',
+      artigos: 'Artigos do Código Penal',
+      circunstancias: 'Circunstâncias agravantes/atenuantes'
+    },
+    sentenca: {
+      resultado: 'Resultado da sentença (condenação/absolvição)',
+      pena: 'Pena aplicada',
+      regime: 'Regime inicial',
+      data: 'Data da sentença'
+    },
+    defesa: {
+      fundamentosPrincipais: 'Pontos principais de contestação',
+      provasAFavor: 'Provas que favorecem o acusado',
+      circunstanciasPositivas: 'Circunstâncias positivas não reconhecidas'
+    }
+  }
+};
+
+// Palavras-chave para detectar informações no texto
+const KEYWORDS_MAPPING = {
+  'apelacao-criminal': {
+    acusado: [
+      'acusado', 'réu', 'denunciado', 'investigado', 'indiciado',
+      'nome:', 'natural de', 'nascido em', 'cpf', 'rg'
+    ],
+    processo: [
+      'processo', 'número', 'autos', 'comarca', 'tribunal', 'vara judicial',
+      'juízo', 'juiz', 'sentença'
+    ],
+    crimes: [
+      'crime', 'delito', 'tráfico', 'homicídio', 'roubo', 'furto',
+      'artigo', 'código penal', 'cp', 'lei', 'crime doloso'
+    ],
+    sentenca: [
+      'condenado', 'absolvido', 'pena', 'anos', 'meses', 'regime',
+      'prisão', 'fechado', 'semiaberto', 'aberto', 'sentença'
+    ],
+    provas: [
+      'testemunha', 'depoimento', 'prova', 'evidência', 'documento',
+      'perícia', 'laudo', 'apreendido'
+    ]
+  }
+};
+
+/**
+ * Pré-processa o conteúdo do documento para melhorar a extração
+ */
+const preprocessDocument = (content) => {
+  if (!content) return '';
+
+  return content
+    // Normalizar espaços em branco
+    .replace(/\s+/g, ' ')
+    // Remover caracteres especiais que podem vir do OCR, mantendo pontuação legal
+    .replace(/[^\w\s.,;:()/\\\-\n]/g, '')
+    // Normalizar referências a artigos
+    .replace(/art\.?\s*(\d+)/gi, 'artigo $1')
+    // Normalizar referências ao código penal
+    .replace(/cód\.?\s*penal/gi, 'código penal')
+    .replace(/cp\.?/gi, 'código penal')
+    // Normalizar termos comuns
+    .replace(/réu/gi, 'acusado')
+    .replace(/denunciado/gi, 'acusado')
+    // Limitar tamanho para não exceder limites da API
+    .substring(0, 12000);
+};
+
+/**
+ * Analisa um documento e extrai informações relevantes
+ * @param {string} documentContent - Conteúdo do documento (pode ser múltiplos docs concatenados)
+ * @param {string} promptType - Tipo de prompt (ex: 'apelacao-criminal')
+ * @returns {Promise<Object>} Análise com informações extraídas e faltantes
+ */
+const analyzeDocument = async (documentContent, promptType) => {
+  try {
+    console.log('🔍 Iniciando análise do documento para:', promptType);
+    
+    if (!documentContent || documentContent.trim().length === 0) {
+      return {
+        success: false,
+        error: 'Documento vazio',
+        extractedInfo: {},
+        missingInfo: [],
+        confidence: 0
+      };
+    }
+
+    // Detectar se há múltiplos documentos (marcados com ---)
+    const hasMultipleDocs = documentContent.includes('---');
+    console.log(`📚 Análise ${hasMultipleDocs ? 'MÚLTIPLA' : 'SIMPLES'} de documento(s)`);
+
+    // Para apelação criminal, fazer análise mais detalhada
+    if (promptType === 'apelacao-criminal') {
+      return await analyzeApelacaoCriminal(documentContent, hasMultipleDocs);
+    }
+
+    // Para outros tipos, retornar análise genérica
+    return await analyzeGenericDocument(documentContent, promptType);
+
+  } catch (error) {
+    console.error('❌ Erro ao analisar documento:', error);
+    return {
+      success: false,
+      error: error.message,
+      extractedInfo: {},
+      missingInfo: []
+    };
+  }
+};
+
+/**
+ * Analisa documento especificamente para Apelação Criminal
+ */
+const analyzeApelacaoCriminal = async (documentContent, hasMultipleDocs = false) => {
+  // Pré-processar o documento
+  const processedContent = preprocessDocument(documentContent);
+
+  const docContext = hasMultipleDocs
+    ? 'Você está recebendo MÚLTIPLOS DOCUMENTOS. Extraia informações de TODOS eles em conjunto.'
+    : 'Você está recebendo UM ÚNICO DOCUMENTO.';
+
+  const analysisPrompt = `${docContext}
+
+Analise este documento jurídico de apelação criminal e extraia APENAS as informações objetivas encontradas.
+
+INSTRUÇÕES IMPORTANTES:
+- Procure por nomes em seções como "acusado", "réu", "denunciado", "investigado"
+- Crimes estão tipicamente em "artigos", "imputados", "praticou", "crime de"
+- Sentenças mencionam "condenado", "absolvido", "pena de", "regime", "prisão"
+- Ignore informações irrelevantes, especulativas ou de terceiros
+- Para crimes, liste apenas os crimes efetivamente imputados
+- Para artigos, extraia apenas números de artigos mencionados
+
+EXEMPLOS DE EXTRAÇÃO:
+
+Documento: "O acusado JOSÉ DA SILVA, nascido em 15/03/1985, foi condenado por tráfico de drogas (artigo 33 da Lei 11.343/06) à pena de 5 anos de reclusão em regime fechado."
+Extração: {
+  "acusado": {"nome": "JOSÉ DA SILVA"},
+  "crimes": {"acusacoes": ["tráfico de drogas"], "artigos": ["33"]},
+  "sentenca": {"resultado": "condenado", "pena": "5 anos de reclusão", "regime": "fechado"}
+}
+
+Documento: "A ré MARIA SANTOS foi absolvida da acusação de furto simples (artigo 155 do Código Penal)."
+Extração: {
+  "acusado": {"nome": "MARIA SANTOS"},
+  "crimes": {"acusacoes": ["furto simples"], "artigos": ["155"]},
+  "sentenca": {"resultado": "absolvida"}
+}
+
+AGORA ANALISE ESTE DOCUMENTO:
+
+${processedContent}
+
+Responda EXATAMENTE neste formato JSON (use null para informações não encontradas):
+{
+  "acusado": {
+    "nome": "nome completo ou null",
+    "dataNascimento": "dd/mm/yyyy ou null",
+    "cpf": "somente números ou null",
+    "endereco": "endereço completo ou null"
+  },
+  "processo": {
+    "numero": "número completo do processo ou null",
+    "comarca": "comarca/tribunal ou null",
+    "vara": "vara judicial ou null"
+  },
+  "crimes": {
+    "acusacoes": ["lista de crimes imputados" ou null],
+    "artigos": ["lista de artigos citados" ou null]
+  },
+  "sentenca": {
+    "resultado": "condenado/absolvido ou null",
+    "pena": "descrição completa da pena ou null",
+    "regime": "fechado/semiaberto/aberto ou null"
+  },
+  "evidenciasEncontradas": ["tipos de prova mencionados" ou null]
+}`;
+
+  try {
+    console.log('🤖 Enviando documento para análise OpenAI...');
+
+    const response = await fetch(AI_CONFIG.API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${AI_CONFIG.API_KEY}`
+      },
+      body: JSON.stringify({
+        model: AI_CONFIG.MODEL,
+        messages: [
+          {
+            role: 'system',
+            content: 'Você é um assistente jurídico especializado em análise de documentos processuais. Extraia APENAS informações objetivas encontradas no texto. Retorne sempre JSON válido, mesmo que incompleto.'
+          },
+          {
+            role: 'user',
+            content: analysisPrompt
+          }
+        ],
+        temperature: 0.1, // Mais preciso para textos legais
+        max_tokens: 2000, // Aumentado para respostas mais completas
+        presence_penalty: 0,
+        frequency_penalty: 0.1
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`Erro API OpenAI: ${response.status} - ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    const analysisText = data.choices[0].message.content.trim();
+
+    console.log('✅ Resposta OpenAI recebida, processando...');
+
+    // Parse JSON da resposta
+    let extractedData = {};
+    try {
+      const jsonMatch = analysisText.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        extractedData = JSON.parse(jsonMatch[0]);
+      } else {
+        // Tentar parse direto se não houver markdown
+        extractedData = JSON.parse(analysisText);
+      }
+    } catch (parseError) {
+      console.warn('⚠️ Falha ao fazer parse do JSON da OpenAI:', parseError);
+      console.log('Resposta recebida:', analysisText.substring(0, 500));
+      extractedData = parseJsonFlexible(analysisText);
+    }
+
+    // Validar e limpar dados extraídos
+    extractedData = validateAndCleanExtractedData(extractedData);
+
+    // Identificar informações faltantes
+    const missingInfo = identifyMissingInfo(extractedData, 'apelacao-criminal');
+    const hasAllInfo = missingInfo.length === 0;
+
+    console.log('✅ Análise concluída - Informações faltantes:', missingInfo.length);
+
+    return {
+      success: true,
+      extractedInfo: extractedData,
+      missingInfo: missingInfo,
+      hasAllInfo: hasAllInfo,
+      confidence: calculateConfidence(extractedData)
+    };
+
+  } catch (error) {
+    console.error('❌ Erro na análise via OpenAI:', error);
+    // Fallback para análise básica por palavras-chave
+    return performKeywordAnalysis(documentContent, 'apelacao-criminal');
+  }
+};
+
+/**
+ * Análise genérica para outros tipos de prompts
+ */
+const analyzeGenericDocument = async (documentContent, promptType) => {
+  console.log('📋 Análise genérica para:', promptType);
+  
+  return {
+    success: true,
+    extractedInfo: {
+      hasContent: documentContent.length > 0,
+      characterCount: documentContent.length,
+      paragraphCount: documentContent.split('\n\n').length
+    },
+    missingInfo: [],
+    hasAllInfo: true,
+    confidence: 0.8
+  };
+};
+
+/**
+ * Análise por palavras-chave como fallback melhorado
+ */
+const performKeywordAnalysis = (content, promptType) => {
+  console.log('🔑 Análise por palavras-chave para:', promptType);
+
+  const contentLower = content.toLowerCase();
+  const extracted = {};
+
+  if (promptType === 'apelacao-criminal') {
+    // Extração específica para campos críticos
+
+    // Nome do acusado - procurar padrões comuns
+    const nomePatterns = [
+      /acusado[.:]\s*([A-Z\sÇÃÕÂÊÎÔÛÁÉÍÓÚÀÈÌÒÙ]{3,})/i,
+      /réu[.:]\s*([A-Z\sÇÃÕÂÊÎÔÛÁÉÍÓÚÀÈÌÒÙ]{3,})/i,
+      /denunciado[.:]\s*([A-Z\sÇÃÕÂÊÎÔÛÁÉÍÓÚÀÈÌÒÙ]{3,})/i,
+      /investigado[.:]\s*([A-Z\sÇÃÕÂÊÎÔÛÁÉÍÓÚÀÈÌÒÙ]{3,})/i
+    ];
+
+    for (const pattern of nomePatterns) {
+      const match = content.match(pattern);
+      if (match && match[1].trim().length > 2) {
+        extracted.acusado = extracted.acusado || {};
+        extracted.acusado.nome = match[1].trim().toUpperCase();
+        break;
+      }
+    }
+
+    // Número do processo
+    const processoPattern = /(\d{7}-\d{2}\.\d{4}\.\d{1,2}\.\d{2}\.\d{4})/;
+    const processoMatch = content.match(processoPattern);
+    if (processoMatch) {
+      extracted.processo = extracted.processo || {};
+      extracted.processo.numero = processoMatch[1];
+    }
+
+    // Crimes - procurar menções específicas
+    const crimesList = [];
+    const crimePatterns = [
+      /tráfico(?:\s+de\s+droga)?/i,
+      /homicídi(?:o|o)/i,
+      /roubo/i,
+      /furto/i,
+      /estupro/i,
+      /latrocíni(?:o|o)/i,
+      /extorsão/i,
+      /crime(?:\s+de)?/i
+    ];
+
+    crimePatterns.forEach(pattern => {
+      if (pattern.test(contentLower)) {
+        const match = contentLower.match(pattern);
+        if (match && !crimesList.includes(match[0])) {
+          crimesList.push(match[0]);
+        }
+      }
+    });
+
+    if (crimesList.length > 0) {
+      extracted.crimes = extracted.crimes || {};
+      extracted.crimes.acusacoes = crimesList;
+    }
+
+    // Artigos do código penal
+    const artigos = [];
+    const artigoPattern = /artigo\s*(\d+)/gi;
+    let artigoMatch;
+    while ((artigoMatch = artigoPattern.exec(contentLower)) !== null) {
+      const artigo = artigoMatch[1];
+      if (!artigos.includes(artigo)) {
+        artigos.push(artigo);
+      }
+    }
+
+    if (artigos.length > 0) {
+      extracted.crimes = extracted.crimes || {};
+      extracted.crimes.artigos = artigos;
+    }
+
+    // Resultado da sentença
+    if (contentLower.includes('condenad')) {
+      extracted.sentenca = extracted.sentenca || {};
+      extracted.sentenca.resultado = 'condenado';
+    } else if (contentLower.includes('absolv')) {
+      extracted.sentenca = extracted.sentenca || {};
+      extracted.sentenca.resultado = 'absolvido';
+    }
+
+    // Regime prisional
+    const regimePatterns = [
+      /regime\s+(fechado|aberto|semi.?aberto)/i,
+      /(fechado|aberto|semi.?aberto)/i
+    ];
+
+    for (const pattern of regimePatterns) {
+      const match = contentLower.match(pattern);
+      if (match) {
+        extracted.sentenca = extracted.sentenca || {};
+        const regime = match[1].toLowerCase();
+        if (regime.includes('semi')) {
+          extracted.sentenca.regime = 'semiaberto';
+        } else {
+          extracted.sentenca.regime = regime;
+        }
+        break;
+      }
+    }
+  }
+
+  const missingInfo = identifyMissingInfo(extracted, promptType);
+
+  return {
+    success: true,
+    extractedInfo: extracted,
+    missingInfo: missingInfo,
+    hasAllInfo: missingInfo.length === 0,
+    confidence: calculateConfidence(extracted)
+  };
+};
+
+/**
+ * Identifica quais informações estão faltando
+ */
+const identifyMissingInfo = (extractedData, promptType) => {
+  const required = REQUIRED_INFORMATION[promptType];
+  if (!required) return [];
+
+  const missing = [];
+
+  // Verificar cada categoria
+  Object.entries(required).forEach(([category, fields]) => {
+    if (typeof fields === 'object') {
+      Object.entries(fields).forEach(([field, description]) => {
+        const value = extractedData?.[category]?.[field];
+        if (!value || value === null || value === '' || (Array.isArray(value) && value.length === 0)) {
+          missing.push({
+            category,
+            field,
+            description,
+            priority: calculateFieldPriority(category, field)
+          });
+        }
+      });
+    }
+  });
+
+  // Ordenar por prioridade
+  return missing.sort((a, b) => b.priority - a.priority);
+};
+
+/**
+ * Valida e limpa dados extraídos da análise
+ */
+const validateAndCleanExtractedData = (data) => {
+  if (!data || typeof data !== 'object') return {};
+
+  const cleaned = { ...data };
+
+  // Validar e limpar nome do acusado
+  if (cleaned.acusado?.nome) {
+    const nome = cleaned.acusado.nome.trim();
+    // Verificar se parece um nome válido (pelo menos 2 palavras, letras maiúsculas)
+    if (nome.length < 3 || !/^[A-Z\sÇÃÕÂÊÎÔÛÁÉÍÓÚÀÈÌÒÙ]+$/.test(nome.toUpperCase())) {
+      cleaned.acusado.nome = null;
+    } else {
+      cleaned.acusado.nome = nome.toUpperCase();
+    }
+  }
+
+  // Validar CPF
+  if (cleaned.acusado?.cpf) {
+    const cpf = cleaned.acusado.cpf.toString().replace(/\D/g, '');
+    if (cpf.length !== 11 || !/^\d{11}$/.test(cpf)) {
+      cleaned.acusado.cpf = null;
+    } else {
+      cleaned.acusado.cpf = cpf;
+    }
+  }
+
+  // Validar data de nascimento
+  if (cleaned.acusado?.dataNascimento) {
+    const data = cleaned.acusado.dataNascimento;
+    // Aceitar formatos dd/mm/yyyy ou dd-mm-yyyy
+    if (!/^\d{2}[\/\-]\d{2}[\/\-]\d{4}$/.test(data)) {
+      cleaned.acusado.dataNascimento = null;
+    }
+  }
+
+  // Validar número do processo
+  if (cleaned.processo?.numero) {
+    const numero = cleaned.processo.numero.toString().trim();
+    // Padrão brasileiro: 7 dígitos - 2 dígitos . 4 dígitos . 1-2 dígitos . 2 dígitos . 4 dígitos
+    if (!/\d{7}-\d{2}\.\d{4}\.\d{1,2}\.\d{2}\.\d{4}/.test(numero)) {
+      cleaned.processo.numero = null;
+    }
+  }
+
+  // Validar crimes - garantir que sejam arrays
+  if (cleaned.crimes?.acusacoes && !Array.isArray(cleaned.crimes.acusacoes)) {
+    if (typeof cleaned.crimes.acusacoes === 'string') {
+      cleaned.crimes.acusacoes = [cleaned.crimes.acusacoes];
+    } else {
+      cleaned.crimes.acusacoes = null;
+    }
+  }
+
+  if (cleaned.crimes?.artigos && !Array.isArray(cleaned.crimes.artigos)) {
+    if (typeof cleaned.crimes.artigos === 'string') {
+      // Extrair apenas números de artigos
+      const artigos = cleaned.crimes.artigos.match(/\d+/g);
+      cleaned.crimes.artigos = artigos || null;
+    } else {
+      cleaned.crimes.artigos = null;
+    }
+  }
+
+  // Validar resultado da sentença
+  if (cleaned.sentenca?.resultado) {
+    const resultado = cleaned.sentenca.resultado.toLowerCase().trim();
+    if (!['condenado', 'absolvido', 'condenação', 'absolvição'].includes(resultado)) {
+      cleaned.sentenca.resultado = null;
+    } else {
+      // Normalizar para termos padrão
+      cleaned.sentenca.resultado = resultado.includes('conden') ? 'condenado' : 'absolvido';
+    }
+  }
+
+  // Validar regime
+  if (cleaned.sentenca?.regime) {
+    const regime = cleaned.sentenca.regime.toLowerCase().trim();
+    const regimesValidos = ['fechado', 'semiaberto', 'semi-aberto', 'aberto'];
+    if (!regimesValidos.some(r => regime.includes(r))) {
+      cleaned.sentenca.regime = null;
+    } else {
+      // Normalizar
+      if (regime.includes('semi')) cleaned.sentenca.regime = 'semiaberto';
+      else if (regime.includes('fechado')) cleaned.sentenca.regime = 'fechado';
+      else if (regime.includes('aberto')) cleaned.sentenca.regime = 'aberto';
+    }
+  }
+
+  // Validar evidências - garantir que seja array
+  if (cleaned.evidenciasEncontradas && !Array.isArray(cleaned.evidenciasEncontradas)) {
+    if (typeof cleaned.evidenciasEncontradas === 'string') {
+      cleaned.evidenciasEncontradas = [cleaned.evidenciasEncontradas];
+    } else {
+      cleaned.evidenciasEncontradas = null;
+    }
+  }
+
+  return cleaned;
+};
+
+/**
+ * Calcula prioridade de um campo (para decidir em qual ordem fazer perguntas)
+ */
+const calculateFieldPriority = (category, field) => {
+  const priorities = {
+    'acusado.nome': 100,
+    'processo.numero': 95,
+    'crimes.acusacoes': 90,
+    'sentenca.resultado': 85,
+    'defesa.fundamentosPrincipais': 80,
+    'acusado.dataNascimento': 50,
+    'acusado.cpf': 50,
+    'defesa.provasAFavor': 70
+  };
+
+  return priorities[`${category}.${field}`] || 50;
+};
+
+/**
+ * Calcula confiança da análise (0-100) com pesos para campos críticos
+ */
+const calculateConfidence = (extractedData) => {
+  if (!extractedData || typeof extractedData !== 'object') return 0;
+
+  let totalScore = 0;
+  let maxScore = 0;
+
+  // Pesos para diferentes campos (campos críticos têm peso maior)
+  const fieldWeights = {
+    // Campos críticos para apelação criminal
+    'acusado.nome': 25, // Muito importante
+    'crimes.acusacoes': 20, // Essencial
+    'sentenca.resultado': 20, // Essencial
+    'processo.numero': 15, // Importante
+
+    // Campos importantes
+    'crimes.artigos': 10,
+    'sentenca.pena': 10,
+    'sentenca.regime': 10,
+
+    // Campos complementares
+    'acusado.dataNascimento': 5,
+    'acusado.cpf': 5,
+    'processo.comarca': 5,
+    'processo.vara': 5,
+    'acusado.endereco': 3,
+    'evidenciasEncontradas': 2
+  };
+
+  // Calcular score baseado nos campos encontrados
+  Object.entries(fieldWeights).forEach(([fieldPath, weight]) => {
+    maxScore += weight;
+    const [category, field] = fieldPath.split('.');
+
+    if (extractedData[category]?.[field]) {
+      const value = extractedData[category][field];
+
+      // Verificar se o valor é válido (não null, não vazio)
+      let isValid = false;
+      if (Array.isArray(value)) {
+        isValid = value.length > 0 && value.every(item => item !== null && item !== '');
+      } else {
+        isValid = value !== null && value !== '';
+      }
+
+      if (isValid) {
+        totalScore += weight;
+      }
+    }
+  });
+
+  // Calcular porcentagem
+  const confidence = maxScore > 0 ? Math.round((totalScore / maxScore) * 100) : 0;
+
+  // Bonus para campos críticos encontrados
+  const criticalFields = ['acusado.nome', 'crimes.acusacoes', 'sentenca.resultado'];
+  const criticalFound = criticalFields.filter(field => {
+    const [category, fieldName] = field.split('.');
+    return extractedData[category]?.[fieldName];
+  }).length;
+
+  // Bonus de até 10 pontos se todos os campos críticos foram encontrados
+  if (criticalFound === criticalFields.length) {
+    confidence = Math.min(100, confidence + 10);
+  }
+
+  return Math.max(0, Math.min(100, confidence));
+};
+
+/**
+ * Gera resumo automático dos documentos analisados
+ */
+const generateDocumentAnalysisSummary = (analysisResult, documentCount = 1, promptType = 'apelacao-criminal') => {
+  if (!analysisResult || !analysisResult.extractedInfo) {
+    return '❌ Não foi possível analisar os documentos.';
+  }
+
+  const { extractedInfo, confidence, missingInfo } = analysisResult;
+  let summary = '';
+
+  if (promptType === 'apelacao-criminal') {
+    summary += `📄 **ANÁLISE DE DOCUMENTO${documentCount > 1 ? 'S' : ''} - APELAÇÃO CRIMINAL**\n\n`;
+
+    // Status da análise
+    if (confidence >= 80) {
+      summary += `✅ **Análise concluída com alta confiança** (${confidence}%)\n\n`;
+    } else if (confidence >= 60) {
+      summary += `⚠️ **Análise concluída com confiança média** (${confidence}%)\n\n`;
+    } else {
+      summary += `❓ **Análise concluída com baixa confiança** (${confidence}%) - Pode precisar de revisão\n\n`;
+    }
+
+    // Informações críticas encontradas
+    const criticalInfo = [];
+
+    if (extractedInfo.acusado?.nome) {
+      criticalInfo.push(`👤 **Acusado:** ${extractedInfo.acusado.nome}`);
+    }
+
+    if (extractedInfo.processo?.numero) {
+      criticalInfo.push(`⚖️ **Processo:** ${extractedInfo.processo.numero}`);
+    }
+
+    if (extractedInfo.crimes?.acusacoes && extractedInfo.crimes.acusacoes.length > 0) {
+      criticalInfo.push(`🚨 **Crime(s):** ${extractedInfo.crimes.acusacoes.join(', ')}`);
+    }
+
+    if (extractedInfo.sentenca?.resultado) {
+      criticalInfo.push(`📝 **Resultado:** ${extractedInfo.sentenca.resultado}`);
+    }
+
+    if (criticalInfo.length > 0) {
+      summary += `**INFORMAÇÕES PRINCIPAIS ENCONTRADAS:**\n`;
+      criticalInfo.forEach(info => summary += `• ${info}\n`);
+      summary += '\n';
+    }
+
+    // Detalhes adicionais
+    const additionalInfo = [];
+
+    if (extractedInfo.acusado?.dataNascimento) {
+      additionalInfo.push(`📅 Nascimento: ${extractedInfo.acusado.dataNascimento}`);
+    }
+
+    if (extractedInfo.crimes?.artigos && extractedInfo.crimes.artigos.length > 0) {
+      additionalInfo.push(`📖 Artigo(s): ${extractedInfo.crimes.artigos.join(', ')}`);
+    }
+
+    if (extractedInfo.sentenca?.pena) {
+      additionalInfo.push(`⏰ Pena: ${extractedInfo.sentenca.pena}`);
+    }
+
+    if (extractedInfo.sentenca?.regime) {
+      additionalInfo.push(`🏢 Regime: ${extractedInfo.sentenca.regime}`);
+    }
+
+    if (additionalInfo.length > 0) {
+      summary += `**DETALHES ADICIONAIS:**\n`;
+      additionalInfo.forEach(info => summary += `• ${info}\n`);
+      summary += '\n';
+    }
+
+    // Status dos documentos
+    if (documentCount === 1) {
+      summary += `📋 **STATUS:** Documento único analisado\n\n`;
+    } else {
+      summary += `📋 **STATUS:** ${documentCount} documentos analisados\n\n`;
+    }
+
+    // Próximos passos baseado no que falta
+    if (missingInfo && missingInfo.length > 0) {
+      const criticalMissing = missingInfo.filter(info =>
+        ['acusado.nome', 'processo.numero', 'crimes.acusacoes', 'sentenca.resultado'].includes(`${info.category}.${info.field}`)
+      );
+
+      if (criticalMissing.length > 0) {
+        summary += `⚠️ **INFORMAÇÕES CRÍTICAS FALTANDO:**\n`;
+        criticalMissing.forEach(info => {
+          summary += `• ${info.description}\n`;
+        });
+        summary += '\n💡 **Recomendação:** Anexe documento complementar ou forneça essas informações manualmente.\n\n';
+      } else {
+        summary += `✅ **Quase pronto!** Faltam apenas detalhes complementares.\n\n`;
+      }
+    } else {
+      summary += `🎯 **PRONTO PARA GERAÇÃO!** Todas as informações necessárias foram encontradas.\n\n`;
+      summary += `🚀 **Próximo passo:** Digite "GERAR" para elaborar a apelação criminal.\n\n`;
+    }
+
+  } else {
+    // Resumo genérico para outros tipos
+    summary += `📄 **ANÁLISE DE DOCUMENTO${documentCount > 1 ? 'S' : ''}**\n\n`;
+    summary += `📊 **Confiança da análise:** ${confidence}%\n\n`;
+
+    if (extractedInfo && Object.keys(extractedInfo).length > 0) {
+      summary += `**INFORMAÇÕES ENCONTRADAS:**\n`;
+      Object.entries(extractedInfo).forEach(([key, value]) => {
+        if (value && (Array.isArray(value) ? value.length > 0 : value !== '')) {
+          summary += `• ${key}: ${Array.isArray(value) ? value.join(', ') : value}\n`;
+        }
+      });
+    }
+  }
+
+  return summary;
+};
+
+/**
+ * Gera mensagem de progresso para múltiplos documentos
+ */
+const generateMultiDocumentProgressMessage = (currentDoc, totalDocs, analysisResult, promptType = 'apelacao-criminal') => {
+  let message = `📄 **Documento ${currentDoc}/${totalDocs} processado com sucesso!**\n\n`;
+
+  // Adicionar resumo do documento atual
+  const summary = generateDocumentAnalysisSummary(analysisResult, 1, promptType);
+  message += summary;
+
+  // Mensagem específica baseada no tipo de documento e progresso
+  if (promptType === 'apelacao-criminal') {
+    if (currentDoc === 1 && totalDocs === 2) {
+      message += `---\n\n📋 **Aguardando documento complementar:**\n\n`;
+      message += `Por favor, anexe o segundo documento (Inquérito Policial) para que eu possa fazer uma análise completa e elaborar a apelação criminal.\n\n`;
+      message += `💡 **Dica:** O Inquérito Policial geralmente contém detalhes importantes sobre as investigações e pode fornecer informações complementares sobre os crimes e evidências.`;
+    } else if (currentDoc === 2 && totalDocs === 2) {
+      message += `---\n\n🎯 **Análise completa finalizada!**\n\n`;
+      message += `Agora tenho informações de ambos os documentos. `;
+
+      if (analysisResult.hasAllInfo) {
+        message += `Digite "GERAR" para elaborar a apelação criminal baseada na análise completa.`;
+      } else {
+        message += `Há algumas informações complementares que podem melhorar a apelação. Digite "GERAR" para continuar ou forneça mais detalhes.`;
+      }
+    }
+  }
+
+  return message;
+};
+
+/**
+ * Gera mensagem formatada mostrando o que foi extraído e o que falta
+ */
+const generateDocumentAnalysisMessage = (analysis, questions, documentCount = 1, promptType = 'apelacao-criminal') => {
+  // Usar o novo resumo automático
+  const summary = generateDocumentAnalysisSummary(analysis, documentCount, promptType);
+
+  let message = summary;
+
+  // Adicionar perguntas se houver
+  if (questions && questions.length > 0) {
+    message += `---\n\n💡 **O que preciso de você:**\n\n`;
+
+    if (questions.length === 1) {
+      message += `${questions[0].text}${questions[0].suggestion ? `\n\n_Sugestão: ${questions[0].suggestion}_` : ''}`;
+    } else {
+      // Se tem múltiplas perguntas, mostrar apenas a primeira e oferecer opção
+      message += `${questions[0].text}${questions[0].suggestion ? `\n\n_Sugestão: ${questions[0].suggestion}_` : ''}`;
+      message += `\n\n_(Você pode responder esta pergunta ou digitar "GERAR" para continuar com as informações que temos)_`;
+    }
+  } else if (analysis.hasAllInfo) {
+    // Se tem todas as informações, mostrar mensagem de sucesso
+    message += `---\n\n🎉 **EXCELENTE!** `;
+    if (documentCount === 1) {
+      message += `Analisei seu documento e tenho todas as informações necessárias.`;
+    } else {
+      message += `Analisei seus ${documentCount} documentos e tenho todas as informações necessárias.`;
+    }
+    message += `\n\n🚀 **Pronto para gerar a apelação criminal!**\n`;
+    message += `Digite "GERAR" para elaborar o documento.`;
+};
+
+/**
+ * Valida se há informações suficientes para gerar
+ */
+const validateSufficientInfo = (analysis, missingInfo) => {
+  if (!analysis) return false;
+  
+  const criticalFields = [
+    'acusado.nome',
+    'processo.numero',
+    'crimes.acusacoes',
+    'sentenca.resultado'
+  ];
+
+  const missingCritical = missingInfo.filter(info => 
+    criticalFields.includes(`${info.category}.${info.field}`)
+  );
+
+  // Se faltam campos críticos, não tem informação suficiente
+  if (missingCritical.length > 0) {
+    return {
+      sufficient: false,
+      missing: missingCritical
+    };
+  }
+
+  return {
+    sufficient: true,
+    missing: []
+  };
+};
+
+/**
+ * Gera perguntas naturais para as informações faltantes
+ */
+const generateQuestionsForMissingInfo = (missingInfo, promptType) => {
+  if (missingInfo.length === 0) {
+    return [];
+  }
+
+  const questions = {
+    'apelacao-criminal': {
+      'acusado.nome': '📋 Qual é o nome completo do acusado?',
+      'acusado.dataNascimento': '📅 Qual é a data de nascimento do acusado?',
+      'acusado.cpf': '🆔 Qual é o CPF ou RG do acusado?',
+      'acusado.endereco': '🏠 Qual é o endereço atual do acusado?',
+      'processo.numero': '⚖️ Qual é o número do processo?',
+      'processo.comarca': '🏛️ Qual é a comarca ou tribunal responsável?',
+      'crimes.acusacoes': '⚠️ Quais são os crimes imputados ao acusado?',
+      'crimes.artigos': '📖 Quais artigos do Código Penal foram citados?',
+      'sentenca.resultado': '📝 Qual foi o resultado da sentença (condenado/absolvido)?',
+      'sentenca.pena': '🔒 Qual foi a pena aplicada?',
+      'sentenca.regime': '🏢 Qual foi o regime inicial da pena?',
+      'defesa.fundamentosPrincipais': '🎯 Quais são os principais pontos de contestação da sentença?',
+      'defesa.provasAFavor': '🔍 Quais provas favorecem o acusado e foram ignoradas?',
+      'defesa.circunstanciasPositivas': '✅ Existem circunstâncias atenuantes não reconhecidas?'
+    }
+  };
+
+  const prompts = questions[promptType] || questions['apelacao-criminal'];
+
+  // Limitar a apenas 2 perguntas prioritárias para evitar sobrecarga
+  const topQuestions = missingInfo
+    .sort((a, b) => b.priority - a.priority)
+    .slice(0, 2);
+
+  return topQuestions.map((info, index) => ({
+    id: `question-${index}`,
+    text: prompts[`${info.category}.${info.field}`] || `Informação faltante: ${info.description}`,
+    field: `${info.category}.${info.field}`,
+    priority: info.priority,
+    required: info.priority > 80,
+    suggestion: generateSuggestionForField(info.category, info.field)
+  }));
+};
+
+/**
+ * Gera sugestão de resposta para um campo específico
+ */
+const generateSuggestionForField = (category, field) => {
+  const suggestions = {
+    'defesa.fundamentosPrincipais': 'Ex: Erro na valoração das provas, contradição entre depoimentos, violação de direitos fundamentais...',
+    'defesa.provasAFavor': 'Ex: Contradições em depoimentos, ausência de provas diretas, documentos que afastam autoria...',
+    'defesa.circunstanciasPositivas': 'Ex: Primariedade, bom comportamento, arrependimento, circunstâncias pessoais favoráveis...',
+    'crimes.acusacoes': 'Ex: Tráfico de drogas (art. 33, Lei 11.343/06), homicídio simples (art. 121, CP)...',
+    'processo.numero': 'Ex: 5005042-10.2024.8.21.0109',
+    'acusado.nome': 'Nome completo do réu conforme documentos processuais'
+  };
+
+  return suggestions[`${category}.${field}`] || '';
+};
+
+/**
+ * Verifica se há informações suficientes para gerar
+ */
+const hasEnoughInfoToGenerate = (missingInfo, promptType) => {
+  // Para apelação criminal, precisa de informações críticas
+  if (promptType === 'apelacao-criminal') {
+    const criticalFields = [
+      'acusado.nome',
+      'processo.numero',
+      'crimes.acusacoes',
+      'sentenca.resultado'
+    ];
+
+    const hasCriticalInfo = !missingInfo.some(info => 
+      criticalFields.includes(`${info.category}.${info.field}`)
+    );
+
+    return hasCriticalInfo;
+  }
+
+  // Para outros tipos, verificar se tem pelo menos 70% de informações
+  return missingInfo.length === 0 || missingInfo.length < 3;
+};
+
+/**
+ * Parse JSON flexível para capturar dados mesmo com formato imperfeito
+ */
+const parseJsonFlexible = (text) => {
+  try {
+    // Tentar extrair estrutura básica
+    const result = {};
+    const patterns = {
+      acusado: /acusado[:\s]*(.*?)(?=processo|crimes|$)/is,
+      processo: /processo[:\s]*(.*?)(?=crimes|sentenca|$)/is,
+      crimes: /crimes[:\s]*(.*?)(?=sentenca|defesa|$)/is,
+      sentenca: /sentenca[:\s]*(.*?)(?=defesa|$)/is
+    };
+
+    Object.entries(patterns).forEach(([key, pattern]) => {
+      const match = text.match(pattern);
+      if (match) {
+        result[key] = match[1].trim();
+      }
+    });
+
+    return result;
+  } catch (error) {
+    return {};
+  }
+};
+
+export default {
+  analyzeDocument,
+  generateQuestionsForMissingInfo,
+  hasEnoughInfoToGenerate,
+  REQUIRED_INFORMATION,
+  KEYWORDS_MAPPING,
+  generateDocumentAnalysisSummary,
+  generateDocumentAnalysisMessage,
+  generateMultiDocumentProgressMessage
+};

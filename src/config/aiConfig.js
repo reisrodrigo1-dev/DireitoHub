@@ -75,8 +75,8 @@ export const PROMPT_SPECIFIC_CONFIG = {
     numberOfParts: 9
   },
   'apelacao-criminal': {
-    model: 'gpt-3.5-turbo',
-    maxTokens: 150000, // 43 partes × 3500 tokens = ~150.5k tokens
+    model: 'gpt-4o-mini',
+    maxTokens: 50000, // 14 partes × 3500 tokens = ~49k tokens
     chunkSize: 3500,
     temperature: 0.5, // Menor temperatura para maior consistência técnica
     useRAG: false,
@@ -88,7 +88,7 @@ export const PROMPT_SPECIFIC_CONFIG = {
     },
     chunkingStrategy: 'fixed',
     multiPartGeneration: true,
-    numberOfParts: 43
+    numberOfParts: 14
   },
   'contestacao': {
     model: 'gpt-3.5-turbo',

@@ -7,7 +7,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { promptRequiresDocument, promptCanBenefitFromDocument, generateDocumentRequestMessage, generateInitialDocumentMessage } from '../services/documentService';
 import { replicaWorkflowService, shouldUseReplicaWorkflow } from '../services/replicaWorkflowService';
 import { handleReplicaWorkflowWithFallback } from '../services/replicaFallbackPatch';
-import { analyzeDocument, generateQuestionsForMissingInfo, hasEnoughInfoToGenerate, generateDocumentSummary, generateDocumentAnalysisMessage, validateSufficientInfo } from '../services/documentAnalysisService';
+import { analyzeDocument, generateQuestionsForMissingInfo, hasEnoughInfoToGenerate, generateDocumentSummary, generateDocumentAnalysisMessage, validateSufficientInfo, identifyMissingInfo } from '../services/documentAnalysisService';
 import DocumentUpload from './DocumentUpload';
 import AttachedDocument from './AttachedDocument';
 
@@ -1070,6 +1070,30 @@ const ChatInterface = ({ promptType, onBack, onClose, existingChat = null, onBac
                     ...prev,
                     [currentQuestion.field]: userMessage.content
                   }));
+
+                  // Atualizar documentAnalysis com a resposta do usuário
+                  if (documentAnalysis) {
+                    const updatedAnalysis = { ...documentAnalysis };
+                    const fieldPath = currentQuestion.field.split('.');
+                    let current = updatedAnalysis.extractedInfo;
+
+                    // Navegar até o campo correto
+                    for (let i = 0; i < fieldPath.length - 1; i++) {
+                      if (!current[fieldPath[i]]) current[fieldPath[i]] = {};
+                      current = current[fieldPath[i]];
+                    }
+
+                    // Atualizar o valor
+                    current[fieldPath[fieldPath.length - 1]] = userMessage.content;
+
+                    // Recalcular informações faltantes
+                    const missingInfo = identifyMissingInfo(updatedAnalysis.extractedInfo, 'apelacao-criminal');
+                    updatedAnalysis.missingInfo = missingInfo;
+                    updatedAnalysis.hasAllInfo = missingInfo.length === 0;
+
+                    setDocumentAnalysis(updatedAnalysis);
+                    console.log('📝 DocumentAnalysis atualizado com resposta do usuário:', currentQuestion.field, '=', userMessage.content);
+                  }
                 }
               }
               
@@ -1352,6 +1376,15 @@ ${isApelacaoCriminal && totalDocuments < requiredDocuments ?
         .map(doc => `\n--- ${doc.fileName} ---\n${doc.content}`)
         .join('\n');
       
+      console.log('📄 DEBUG: Documentos para análise:');
+      [...attachedDocuments, newDocument].forEach((doc, index) => {
+        console.log(`📄 Documento ${index + 1}: ${doc.fileName}`);
+        console.log(`📊 Tamanho: ${doc.content.length} caracteres`);
+        console.log(`📝 Preview: ${doc.content.substring(0, 200)}...`);
+      });
+      
+      console.log('📋 Conteúdo combinado total:', combinedContent.length, 'caracteres');
+      
       // Se apelação criminal, fazer análise combinada de ambos os docs
       const analysis = await analyzeDocument(
         combinedContent, 
@@ -1381,7 +1414,7 @@ ${isApelacaoCriminal && totalDocuments < requiredDocuments ?
         const readyMessage = {
           id: Date.now() + 2,
           role: 'assistant',
-          content: `✅ **Excelente!**\n\nAnalisei todos os documentos e encontrei todas as informações necessárias. Agora estou pronto para gerar a apelação.\n\n📝 **Digite "GERAR"** quando quiser que eu elabore as razões de apelação com 150 mil tokens.`,
+          content: `✅ **Excelente!**\n\nAnalisei todos os documentos e encontrei todas as informações necessárias. Agora estou pronto para gerar a apelação.\n\n📝 **Digite "GERAR"** quando quiser que eu elabore as razões de apelação com 50 mil tokens.`,
           timestamp: new Date(),
           isReady: true
         };

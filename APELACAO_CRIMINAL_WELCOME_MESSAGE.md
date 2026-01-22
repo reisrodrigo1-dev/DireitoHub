@@ -2,7 +2,7 @@
 
 ## Análise do Prompt Enviado
 
-O prompt "Apelação Criminal" foi estruturado para elaborar **razões de apelação criminal com 150 mil tokens** (43 partes de ~3.500 tokens cada) seguindo um método rigorosamente técnico e profissional.
+O prompt "Apelação Criminal" foi estruturado para elaborar **razões de apelação criminal com 50 mil tokens** (14 partes de ~3.500 tokens cada) seguindo um método rigorosamente técnico e profissional.
 
 ### Características do Prompt:
 
@@ -27,7 +27,7 @@ A mensagem foi registrada em `src/services/promptService.js` na função `getWel
 ```
 🔴 **ASSISTENTE DE APELAÇÃO CRIMINAL** 🔴
 
-Bem-vindo ao especialista em Razões de Apelação Criminal com 150 mil tokens!
+Bem-vindo ao especialista em Razões de Apelação Criminal com 50 mil tokens!
 
 **COMO FUNCIONA:**
 
@@ -52,7 +52,7 @@ Este assistente elabora apelações criminais **rigorosamente técnicas**, anali
 
 **RESULTADO:**
 
-Você receberá uma **apelação de 150 mil tokens** estruturada em 5 seções:
+Você receberá uma **apelação de 50 mil tokens** estruturada em 5 seções:
    ✅ **Relatório** – Exposição dos fatos processuais
    ✅ **Admissibilidade** – Demonstração dos requisitos do recurso
    ✅ **Mérito** – Análise profunda com teses em hierarquia
@@ -96,7 +96,7 @@ Comece enviando o PDF da sentença e dos documentos! 📄
 
 - Gera 43 partes sequenciais com 1.5s de pausa entre requisições
 - Cada parte referencia o contexto das partes anteriores
-- Total: ~150.000 tokens (~45-50 minutos de geração)
+- Total: ~50.000 tokens (~15-20 minutos de geração)
 
 ### Fase 4: ENTREGA
 - Apelação completa é exibida no chat
@@ -170,7 +170,7 @@ Comece enviando o PDF da sentença e dos documentos! 📄
 ## Validação
 
 ✅ Arquivo `/public/prompts/Apelacao Criminal.txt` - Criado com 3000+ linhas  
-✅ Configuração em `aiConfig.js` - 150k tokens, 43 partes  
+✅ Configuração em `aiConfig.js` - 50k tokens, 14 partes  
 ✅ Routing em `ChatInterface.jsx` - Estruturado e exclusivo  
 ✅ Mensagem de boas-vindas - Clara e instrutiva  
 ✅ Aparecer no dashboard Juri.AI - "Assistentes Populares"  

@@ -24,8 +24,17 @@ const handleAPIError = async (response) => {
 
 // Validação da API Key
 const validateAPIKey = () => {
+  console.log('🔑 DEBUG: Verificando API Key...');
+  console.log('🔑 DEBUG: API_KEY existe:', !!API_KEY);
+  console.log('🔑 DEBUG: API_KEY length:', API_KEY ? API_KEY.length : 0);
+  console.log('🔑 DEBUG: API_KEY starts with sk-:', API_KEY ? API_KEY.startsWith('sk-') : false);
+  
   if (!API_KEY || API_KEY.trim() === '') {
     throw new Error('❌ API Key da OpenAI não configurada. Configure VITE_OPENAI_API_KEY no arquivo .env');
+  }
+  
+  if (!API_KEY.startsWith('sk-')) {
+    throw new Error('❌ API Key da OpenAI tem formato inválido. Deve começar com "sk-"');
   }
 };
 
@@ -1049,6 +1058,11 @@ ${previousContent.substring(0, 2000)}...
 
 Continue gerando novo conteúdo a partir daqui.`;
       
+      console.log('🔑 DEBUG: Fazendo requisição para OpenAI...');
+      console.log('🔑 DEBUG: API_URL:', API_URL);
+      console.log('🔑 DEBUG: MODEL:', MODEL);
+      console.log('🔑 DEBUG: API_KEY (primeiros 10 chars):', API_KEY ? API_KEY.substring(0, 10) + '...' : 'UNDEFINED');
+      
       const response = await fetch(API_URL, {
         method: 'POST',
         headers: {
@@ -1056,7 +1070,7 @@ Continue gerando novo conteúdo a partir daqui.`;
           'Authorization': `Bearer ${API_KEY}`
         },
         body: JSON.stringify({
-          model: MODEL,
+          model: config.model,
           messages: [
             {
               role: 'system',

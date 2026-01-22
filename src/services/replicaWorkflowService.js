@@ -121,13 +121,13 @@ Para elaborar uma réplica tecnicamente adequada, seguiremos um processo estrutu
 **📄 FORMATOS ACEITOS:**
 - Arquivos de texto (.txt) - RECOMENDADO
 - Documentos Word (.docx) - RECOMENDADO  
-- Arquivos PDF (.pdf) - Aceito (extração limitada)
-- Tamanho máximo: 10MB por arquivo
+- Arquivos PDF (.pdf) - TOTALMENTE SUPORTADO (OCR automático)
+- Tamanho máximo: 25MB por arquivo
 
-**💡 DICA IMPORTANTE:**
-Para melhor resultado, prefira arquivos .txt ou .docx. 
-PDFs são aceitos mas podem ter extração de texto limitada.
-Você pode anexar múltiplos documentos - todos serão analisados em conjunto.
+**💡 DICAS IMPORTANTES:**
+• PDFs são processados automaticamente com OCR inteligente se necessário
+• Para PDFs grandes (>20 páginas), apenas as primeiras 20 são processadas
+• Você pode anexar múltiplos documentos - todos serão analisados em conjunto
 
 **⚠️ IMPORTANTE:**
 - O processo será sequencial (não é possível pular seções)
