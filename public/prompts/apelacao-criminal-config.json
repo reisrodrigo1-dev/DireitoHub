@@ -1,0 +1,127 @@
+{
+  "sistema": "APELAÇÃO CRIMINAL",
+  "versao": "2.0",
+  "descricao": "Sistema integrado de dois prompts para geração e validação de razões de apelação criminal",
+  "data_criacao": "2026-01-22",
+  "fluxo_obrigatorio": {
+    "etapa_1": {
+      "nome": "Geração Inicial",
+      "arquivo": "apelacao-criminal.txt",
+      "tipo": "prompt_geracao",
+      "descricao": "Gera apelação completa com protocolo de 11 etapas de leitura",
+      "capacidade": "8000+ caracteres",
+      "versoes_disponiveis": [
+        "VERSÃO 1: Completa (8.000+ caracteres) - Para sistemas com capacidade estendida",
+        "VERSÃO 2: ChatGPT (≤8.000 caracteres) - Para compatibilidade ChatGPT"
+      ],
+      "saida": "Apelação criminal completa (seções I-V)"
+    },
+    "etapa_2": {
+      "nome": "Reprocessamento Obrigatório",
+      "arquivo": "apelacao-criminal-final.txt",
+      "tipo": "prompt_validacao",
+      "descricao": "Reprocessa, valida e refina apelação antes da entrega final",
+      "capacidade": "≤8.000 caracteres (ChatGPT-otimizado)",
+      "validacoes": 10,
+      "saida": "Apelação validada, refinada e entregável"
+    }
+  },
+  "fluxo_detalhado": [
+    "1. Usuário fornece documentos (sentença, denúncia, provas, depoimentos)",
+    "2. Sistema executa apelacao-criminal.txt → Gera apelação inicial",
+    "3. Usuário recebe apelação gerada para análise",
+    "4. Texto é repassado para apelacao-criminal-final.txt",
+    "5. Sistema reprocessa com validação obrigatória (10 pontos)",
+    "6. Se falhar em qualquer ponto → Reprocessa automaticamente",
+    "7. Quando passar em 100% de conformidade → Entrega final"
+  ],
+  "validacoes_obrigatorias": {
+    "1_estrutura_completa": "Todas as 5 seções presentes (I-V)",
+    "2_prosa_juridica": "Texto contínuo, sem fragmentação, sem listas internas",
+    "3_steel_manning": "Cada impugnação apresenta fundamento na forma mais forte",
+    "4_dados_concretos": "Nomes em MAIÚSCULAS, datas específicas, zero placeholders",
+    "5_hierarquia_teses": "Tese principal + 5 subsidiárias em ordem correta",
+    "6_referencias_probatorias": "Todos argumentos ancorados em provas dos autos",
+    "7_principios_constitucionais": "Presunção inocência, in dubio pro reo, ampla defesa",
+    "8_fundamentacao_juridica": "Apenas artigos dos documentos, sem jurisprudência",
+    "9_terminologia_correta": "Apelante/recorrente, Ministério Público/acusação",
+    "10_vedacoes_observadas": "Sem 'Nestes termos', sem artigos extras, sem placeholders"
+  },
+  "requisitos_essenciais": {
+    "secao_3_merito_recursal": {
+      "minimo_tokens": 4000,
+      "descricao": "Seção III deve ser extensa, detalhada e rigorosamente técnica"
+    },
+    "prosa": "Contínua, técnica, sem listas (exceto pedidos finais)",
+    "nomes_proprios": "MAIÚSCULAS obrigatoriamente",
+    "teses": "Sempre em hierarquia (principal → subsidiárias)",
+    "vedacoes": [
+      "Não citar jurisprudência",
+      "Não citar doutrina",
+      "Não mencionar artigos fora dos documentos",
+      "Nunca usar 'Nestes termos, pede deferimento'",
+      "Sem placeholders não preenchidos"
+    ]
+  },
+  "ciclo_garantido": {
+    "tipo": "loop_validacao_obrigatorio",
+    "descricao": "Reprocessamento automático até 100% conformidade - SEM EXCEÇÕES",
+    "passo_1": "GERAR apelação com apelacao-criminal.txt",
+    "passo_2": "USUÁRIO RECEBE texto gerado",
+    "passo_3": "REPASSAR texto para apelacao-criminal-final.txt",
+    "passo_4": "VALIDAR 10 pontos críticos obrigatoriamente",
+    "passo_5": "SE FALHAR em QUALQUER ponto → REPROCESSAR AUTOMATICAMENTE",
+    "passo_6": "REPETIR validação até 100% conformidade",
+    "passo_7": "APENAS QUANDO APROVADO → ENTREGAR versão final"
+  },
+  "arquivos_relacionados": {
+    "apelacao_criminal_txt": {
+      "caminho": "public/prompts/apelacao-criminal.txt",
+      "tipo": "prompt_principal",
+      "tamanho_aproximado": "8000+ caracteres",
+      "proposito": "Geração inicial de apelação criminal"
+    },
+    "apelacao_criminal_final_txt": {
+      "caminho": "public/prompts/apelacao-criminal-final.txt",
+      "tipo": "prompt_validacao",
+      "tamanho_aproximado": "≤8000 caracteres",
+      "proposito": "Reprocessamento e validação obrigatória"
+    },
+    "prompt_apelacao_criminal_final_md": {
+      "caminho": "public/prompts/PROMPT_APELACAO_CRIMINAL_FINAL.md",
+      "tipo": "documentacao",
+      "proposito": "Documentação completa com ambas versões e instruções"
+    }
+  },
+  "instrucoes_uso": {
+    "para_desenvolvedores": [
+      "1. Integrar apelacao-criminal.txt em seu LLM para etapa 1",
+      "2. Integrar apelacao-criminal-final.txt em seu LLM para etapa 2",
+      "3. Implementar loop de validação conforme ciclo_garantido",
+      "4. Aguardar 100% conformidade antes de entregar ao usuário",
+      "5. Registrar cada validação para auditoria"
+    ],
+    "para_usuarios": [
+      "1. Forneça todos os documentos do processo",
+      "2. O sistema gerará apelação inicial",
+      "3. O sistema reprocessará automaticamente para garantir qualidade",
+      "4. Você receberá versão final validada em 100%",
+      "5. Nenhuma apelação será entregue sem passar todas as validações"
+    ]
+  },
+  "garantias_qualidade": {
+    "estrutura": "Impecável (todas 5 seções)",
+    "prosa": "Fluente, sem fragmentação, sem repetições",
+    "steel_manning": "Em cada argumento",
+    "dados": "Concretos, específicos, sem placeholders",
+    "conformidade": "100% com todas as 10 validações",
+    "entrega": "Garantida apenas após reprocessamento obrigatório"
+  },
+  "notas_criticas": [
+    "Reprocessamento SEMPRE ocorre antes da entrega final - NÃO HÁ EXCEÇÕES",
+    "Sistema executa validação obrigatória de 10 pontos em TODAS as apelações",
+    "Loop automático: Falha em qualquer ponto → Reprocessa imediatamente",
+    "Entrega garantida apenas após 100% conformidade",
+    "Sistema é fail-safe — mantém loop até qualidade máxima atingida"
+  ]
+}

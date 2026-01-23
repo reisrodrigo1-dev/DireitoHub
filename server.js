@@ -534,6 +534,86 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', message: 'Servidor DataJud funcionando' });
 });
 
+// OpenAI API Proxy Routes
+const OPENAI_API_KEY = process.env.VITE_OPENAI_API_KEY || process.env.OPENAI_API_KEY;
+
+if (!OPENAI_API_KEY) {
+  console.warn('⚠️ OPENAI_API_KEY não configurada no servidor');
+}
+
+// Proxy para OpenAI Chat Completions
+app.post('/api/openai/chat/completions', async (req, res) => {
+  try {
+    if (!OPENAI_API_KEY) {
+      return res.status(500).json({ error: 'OpenAI API key not configured on server' });
+    }
+
+    console.log('🔄 Proxy OpenAI Chat Completions - Recebida requisição');
+
+    const response = await axios.post('https://api.openai.com/v1/chat/completions', req.body, {
+      headers: {
+        'Authorization': `Bearer ${OPENAI_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      timeout: 60000 // 60 segundos timeout
+    });
+
+    console.log('✅ Proxy OpenAI - Resposta recebida com sucesso');
+    res.json(response.data);
+  } catch (error) {
+    console.error('❌ Erro no proxy OpenAI Chat:', error.response?.data || error.message);
+    res.status(error.response?.status || 500).json({
+      error: error.response?.data || { message: error.message }
+    });
+  }
+});
+
+// Proxy para OpenAI Models (para validação)
+app.get('/api/openai/models', async (req, res) => {
+  try {
+    if (!OPENAI_API_KEY) {
+      return res.status(500).json({ error: 'OpenAI API key not configured on server' });
+    }
+
+    const response = await axios.get('https://api.openai.com/v1/models', {
+      headers: {
+        'Authorization': `Bearer ${OPENAI_API_KEY}`
+      }
+    });
+
+    res.json(response.data);
+  } catch (error) {
+    console.error('❌ Erro no proxy OpenAI Models:', error.response?.data || error.message);
+    res.status(error.response?.status || 500).json({
+      error: error.response?.data || { message: error.message }
+    });
+  }
+});
+
+// Proxy para OpenAI Embeddings
+app.post('/api/openai/embeddings', async (req, res) => {
+  try {
+    if (!OPENAI_API_KEY) {
+      return res.status(500).json({ error: 'OpenAI API key not configured on server' });
+    }
+
+    const response = await axios.post('https://api.openai.com/v1/embeddings', req.body, {
+      headers: {
+        'Authorization': `Bearer ${OPENAI_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      timeout: 30000
+    });
+
+    res.json(response.data);
+  } catch (error) {
+    console.error('❌ Erro no proxy OpenAI Embeddings:', error.response?.data || error.message);
+    res.status(error.response?.status || 500).json({
+      error: error.response?.data || { message: error.message }
+    });
+  }
+});
+
 // Middleware de erro
 app.use((err, req, res, next) => {
   console.error(err.stack);

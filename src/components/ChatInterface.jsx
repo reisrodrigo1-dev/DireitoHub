@@ -7,9 +7,11 @@ import { useAuth } from '../contexts/AuthContext';
 import { promptRequiresDocument, promptCanBenefitFromDocument, generateDocumentRequestMessage, generateInitialDocumentMessage } from '../services/documentService';
 import { replicaWorkflowService, shouldUseReplicaWorkflow } from '../services/replicaWorkflowService';
 import { handleReplicaWorkflowWithFallback } from '../services/replicaFallbackPatch';
-import { analyzeDocument, generateQuestionsForMissingInfo, hasEnoughInfoToGenerate, generateDocumentSummary, generateDocumentAnalysisMessage, validateSufficientInfo, identifyMissingInfo } from '../services/documentAnalysisService';
+import { analyzeDocument, generateQuestionsForMissingInfo, hasEnoughInfoToGenerate, generateDocumentSummary, generateDocumentAnalysisMessage, validateSufficientInfo, identifyMissingInfo, injectDocumentInfoIntoPrompt } from '../services/documentAnalysisService';
+import { requiresWorkflow, getWorkflowQuestions, validateWorkflowAnswers, formatWorkflowContext, getWorkflowCompletionMessage } from '../services/workflowService';
 import DocumentUpload from './DocumentUpload';
 import AttachedDocument from './AttachedDocument';
+import WorkflowCollector from './WorkflowCollector';
 
 // Função utilitária para normalizar timestamps de diferentes fontes
 const normalizeTimestamp = (timestamp) => {
@@ -56,12 +58,20 @@ const ChatInterface = ({ promptType, onBack, onClose, existingChat = null, onBac
   // Estados específicos para o fluxo da Réplica
   const [isReplicaWorkflow, setIsReplicaWorkflow] = useState(false);
   const [replicaState, setReplicaState] = useState(null);
+  const [copiedMessageId, setCopiedMessageId] = useState(null);
   const [replicaPhase, setReplicaPhase] = useState('init'); // 'init', 'document_upload', 'section_work', 'completion'
   
   // Estados para análise inteligente de documentos
   const [documentAnalysis, setDocumentAnalysis] = useState(null);
   const [missingInfoQuestions, setMissingInfoQuestions] = useState([]);
   const [questionsAnswered, setQuestionsAnswered] = useState({});
+  
+  // Estados para fluxo de trabalho personalizado
+  const [requiresWorkflowCheck, setRequiresWorkflowCheck] = useState(false);
+  const [workflowQuestions, setWorkflowQuestions] = useState([]);
+  const [workflowAnswers, setWorkflowAnswers] = useState({});
+  const [currentWorkflowQuestion, setCurrentWorkflowQuestion] = useState(0);
+  const [workflowPhase, setWorkflowPhase] = useState('init'); // 'init', 'collecting', 'ready', 'generating'
   
   const messagesEndRef = useRef(null);
   const { user } = useAuth();
@@ -227,6 +237,40 @@ const ChatInterface = ({ promptType, onBack, onClose, existingChat = null, onBac
           setCurrentChatId(existingChat.id);
           setChatTitle(existingChat.title || '');
           
+          // Carregar documentos anexados se existirem
+          if (existingChat.attachedDocuments && existingChat.attachedDocuments.length > 0) {
+            console.log('📎 Carregando documentos anexados:', existingChat.attachedDocuments.length);
+            setAttachedDocuments(existingChat.attachedDocuments);
+            
+            // Se é apelação criminal e tem documentos suficientes, refazer análise
+            if (existingChat.promptType?.id === 'apelacao-criminal' && existingChat.attachedDocuments.length >= 2) {
+              console.log('🔄 Refazendo análise dos documentos para apelação criminal...');
+              
+              try {
+                // Combinar conteúdo dos documentos
+                const combinedContent = existingChat.attachedDocuments
+                  .map(doc => `\n--- ${doc.fileName} ---\n${doc.content}`)
+                  .join('\n');
+                
+                // Importar função de análise
+                const { analyzeDocument } = await import('../services/documentAnalysisService');
+                
+                const analysis = await analyzeDocument(combinedContent, 'apelacao-criminal');
+                console.log('✅ Análise recarregada:', analysis);
+                setDocumentAnalysis(analysis);
+                
+                // Se há informações faltantes, gerar perguntas
+                if (analysis.missingInfo && analysis.missingInfo.length > 0) {
+                  const { generateQuestionsForMissingInfo } = await import('../services/documentAnalysisService');
+                  const questions = generateQuestionsForMissingInfo(analysis.missingInfo, 'apelacao-criminal');
+                  setMissingInfoQuestions(questions);
+                }
+              } catch (analysisError) {
+                console.error('❌ Erro ao recarregar análise:', analysisError);
+              }
+            }
+          }
+          
           // Extrair número total de perguntas das mensagens existentes
           const totalQuestions = extractTotalQuestions(normalizedMessages);
           if (totalQuestions > 0) {
@@ -267,6 +311,18 @@ const ChatInterface = ({ promptType, onBack, onClose, existingChat = null, onBac
           preview: content?.substring(0, 150) || 'VAZIO'
         });
         setPromptContent(content);
+
+        // Verificar se requer fluxo de trabalho personalizado
+        const workflowRequired = requiresWorkflow(promptType.id);
+        setRequiresWorkflowCheck(workflowRequired);
+        
+        if (workflowRequired) {
+          console.log('🔄 Prompt requer fluxo de trabalho personalizado');
+          const workflowQs = getWorkflowQuestions(promptType.id);
+          setWorkflowQuestions(workflowQs || []);
+          setWorkflowPhase('collecting');
+          setConversationPhase('workflow');
+        }
 
         // Verificar se é um fluxo de Réplica
         const isReplica = shouldUseReplicaWorkflow(promptType);
@@ -823,6 +879,62 @@ const ChatInterface = ({ promptType, onBack, onClose, existingChat = null, onBac
     }
   };
 
+  // Funções para workflow personalizado
+  const handleWorkflowAnswer = (questionId, answer) => {
+    setWorkflowAnswers(prev => ({
+      ...prev,
+      [questionId]: answer
+    }));
+  };
+
+  const handleWorkflowComplete = async () => {
+    // Validar se todas as respostas obrigatórias foram fornecidas
+    const validation = validateWorkflowAnswers(promptType.id, workflowAnswers);
+    
+    if (!validation.valid) {
+      alert(`Por favor, responda às seguintes perguntas obrigatórias: ${validation.missing.join(', ')}`);
+      return;
+    }
+
+    setIsLoading(true);
+    
+    try {
+      // Adicionar mensagem de confirmação
+      const completionMessage = getWorkflowCompletionMessage(promptType.id);
+      const newMessage = {
+        id: Date.now(),
+        role: 'assistant',
+        content: completionMessage,
+        timestamp: new Date()
+      };
+      
+      setMessages(prev => [...prev, newMessage]);
+      setWorkflowPhase('ready');
+      setConversationPhase('ready');
+      
+      // Salvar chat com workflow concluído
+      if (currentChatId) {
+        await chatStorageService.updateChat(currentChatId, {
+          messages: [...messages, newMessage],
+          workflowAnswers,
+          conversationPhase: 'ready'
+        });
+      }
+      
+    } catch (error) {
+      console.error('Erro ao completar workflow:', error);
+      alert('Erro ao processar as configurações. Tente novamente.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleWorkflowNextQuestion = () => {
+    if (currentWorkflowQuestion < workflowQuestions.length - 1) {
+      setCurrentWorkflowQuestion(prev => prev + 1);
+    }
+  };
+
   // Função para enviar mensagem
   const sendMessage = async () => {
     if (!currentMessage.trim() || isLoading) return;
@@ -950,11 +1062,22 @@ const ChatInterface = ({ promptType, onBack, onClose, existingChat = null, onBac
               }
             ];
             
+            // Adicionar contexto do workflow se disponível
+            if (workflowPhase === 'ready' && Object.keys(workflowAnswers).length > 0) {
+              const workflowContext = formatWorkflowContext(promptType.id, workflowAnswers);
+              aiMessages.splice(1, 0, {
+                role: 'system',
+                content: workflowContext
+              });
+              console.log('🔧 Contexto do workflow adicionado às mensagens');
+            }
+            
             console.log('📤 aiMessages preparadas:', {
               systemPromptLength: systemContent.length,
               totalMessages: aiMessages.length,
               hasDocuments: attachedDocuments.length > 0,
-              documentsCount: attachedDocuments.length
+              documentsCount: attachedDocuments.length,
+              hasWorkflowContext: workflowPhase === 'ready' && Object.keys(workflowAnswers).length > 0
             });
             
             // Verificar se é prompt que requer geração grande (múltiplas partes)
@@ -980,25 +1103,87 @@ const ChatInterface = ({ promptType, onBack, onClose, existingChat = null, onBac
         } else {
           // FLUXO NORMAL: Chat estruturado com perguntas
           
-          // PRIMEIRO: Verificar se é comando "GERAR" (antes de qualquer validação)
-          if (userMessage.content.toUpperCase().trim() === 'GERAR') {
-            console.log('🎯 Comando GERAR detectado! ConversationPhase:', conversationPhase);
+          // PRIMEIRO: Verificar se é comando "GERAR" ou "GERAR MESMO ASSIM" (antes de qualquer validação)
+          if (userMessage.content.toUpperCase().trim() === 'GERAR' || userMessage.content.toUpperCase().trim() === 'GERAR MESMO ASSIM') {
+            const isForceGenerate = userMessage.content.toUpperCase().trim() === 'GERAR MESMO ASSIM';
+            console.log('🎯 Comando GERAR detectado!', { 
+              command: userMessage.content.toUpperCase().trim(),
+              isForceGenerate,
+              conversationPhase, 
+              workflowPhase 
+            });
             
-            if (conversationPhase === 'questioning') {
+            // Permitir GERAR nas fases: questioning, ready, workflow
+            if (conversationPhase === 'questioning' || conversationPhase === 'ready' || conversationPhase === 'workflow') {
+              // Se está no workflow mas não completou, permitir gerar com aviso
+              if (conversationPhase === 'workflow' && workflowPhase !== 'ready') {
+                // Ainda permitir gerar, mas com aviso sobre workflow incompleto
+                console.log('⚠️ Gerando sem completar workflow - usuário optou por pular');
+              }
+              
               // Verificar se há informações suficientes analisando o documento
               if (documentAnalysis) {
                 const validation = validateSufficientInfo(documentAnalysis, documentAnalysis.missingInfo);
                 
-                if (!validation.sufficient) {
+                if (!validation.sufficient && !isForceGenerate) {
                   response = {
                     success: true,
                     message: `⚠️ Faltam informações críticas para gerar a apelação:\n\n${validation.missing
                       .map(m => `• ${m.description}`)
-                      .join('\n')}\n\nPor favor, complete essas informações primeiro.`
+                      .join('\n')}\n\nPor favor, complete essas informações primeiro ou digite "GERAR MESMO ASSIM" se quiser prosseguir.`
                   };
                 } else {
-                  // Tem informações suficientes
-                  setConversationPhase('ready');
+                  // Tem informações suficientes OU usuário forçou geração, gerar resultado
+                  try {
+                    console.log('🤖 Gerando apelação criminal com 150k tokens...', { forced: isForceGenerate });
+                    console.log('📊 DEBUG - documentAnalysis:', {
+                      exists: !!documentAnalysis,
+                      hasAcusado: !!documentAnalysis?.acusado,
+                      hasProcesso: !!documentAnalysis?.processo,
+                      acusado: documentAnalysis?.acusado?.nome || 'N/A',
+                      processo: documentAnalysis?.processo?.numero || 'N/A'
+                    });
+                    
+                    // Injetar informações dos documentos no prompt
+                    let enhancedPrompt = promptContent;
+                    if (documentAnalysis && documentAnalysis.acusado) {
+                      console.log('✅ Injetando dados dos documentos no prompt...');
+                      enhancedPrompt = injectDocumentInfoIntoPrompt(promptContent, documentAnalysis);
+                      console.log('📝 Prompt enhanced with document info:', {
+                        originalLength: promptContent.length,
+                        enhancedLength: enhancedPrompt.length,
+                        hasDocumentInfo: enhancedPrompt.includes('INFORMAÇÕES EXTRAÍDAS DOS DOCUMENTOS'),
+                        firstAcusado: documentAnalysis?.acusado?.nome
+                      });
+                    } else {
+                      console.warn('⚠️ AVISO: documentAnalysis com dados extraídos não encontrado!');
+                    }
+                    
+                    // Para apelação criminal, usar geração grande sempre
+                    response = await generateLargeResponse(
+                      [
+                        {
+                          role: 'system',
+                          content: enhancedPrompt
+                        },
+                        ...messages.map(msg => ({
+                          role: msg.role,
+                          content: msg.content
+                        }))
+                      ],
+                      promptType.id
+                    );
+                    
+                    if (response.success) {
+                      setConversationPhase('generating');
+                    }
+                  } catch (error) {
+                    console.error('❌ Erro ao gerar resultado:', error);
+                    response = {
+                      success: false,
+                      message: `Erro ao gerar resultado: ${error.message}`
+                    };
+                  }
                 }
               } else {
                 response = {
@@ -1006,39 +1191,7 @@ const ChatInterface = ({ promptType, onBack, onClose, existingChat = null, onBac
                   message: '⚠️ Por favor, anexe o documento da sentença primeiro para que eu possa analisar e gerar a apelação.'
                 };
               }
-            }
-            
-            if (conversationPhase === 'ready') {
-              // Tem todas as informações, gerar resultado
-              try {
-                console.log('🤖 Gerando apelação criminal com 150k tokens...');
-                
-                // Para apelação criminal, usar geração grande sempre
-                response = await generateLargeResponse(
-                  [
-                    {
-                      role: 'system',
-                      content: promptContent
-                    },
-                    ...messages.map(msg => ({
-                      role: msg.role,
-                      content: msg.content
-                    }))
-                  ],
-                  promptType.id
-                );
-                
-                if (response.success) {
-                  setConversationPhase('generating');
-                }
-              } catch (error) {
-                console.error('❌ Erro ao gerar resultado:', error);
-                response = {
-                  success: false,
-                  message: `Erro ao gerar resultado: ${error.message}`
-                };
-              }
-            } else if (conversationPhase !== 'questioning') {
+            } else {
               response = {
                 success: true,
                 message: '❌ Comando não reconhecido nesta fase'
@@ -1730,12 +1883,33 @@ ${isApelacaoCriminal && totalDocuments < requiredDocuments ?
                     minute: '2-digit' 
                   })}
                 </p>
-                {message.isResult && (
+                {message.role === 'assistant' && (
                   <button
-                    onClick={() => navigator.clipboard.writeText(message.content)}
-                    className="text-xs text-green-600 hover:text-green-800 ml-2"
+                    onClick={async () => {
+                      try {
+                        await navigator.clipboard.writeText(message.content);
+                        setCopiedMessageId(message.id);
+                        setTimeout(() => setCopiedMessageId(null), 2000);
+                      } catch (err) {
+                        console.error('Erro ao copiar:', err);
+                        // Fallback para browsers antigos
+                        const textArea = document.createElement('textarea');
+                        textArea.value = message.content;
+                        document.body.appendChild(textArea);
+                        textArea.select();
+                        document.execCommand('copy');
+                        document.body.removeChild(textArea);
+                        setCopiedMessageId(message.id);
+                        setTimeout(() => setCopiedMessageId(null), 2000);
+                      }
+                    }}
+                    className="text-xs text-gray-500 hover:text-gray-700 ml-2 flex items-center space-x-1 transition-colors"
+                    title="Copiar resposta"
                   >
-                    Copiar
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                    </svg>
+                    <span>{copiedMessageId === message.id ? 'Copiado!' : 'Copiar'}</span>
                   </button>
                 )}
               </div>
@@ -1745,6 +1919,18 @@ ${isApelacaoCriminal && totalDocuments < requiredDocuments ?
         
         <div ref={messagesEndRef} />
       </div>
+
+      {/* Workflow Collector - aparece quando requer workflow */}
+      {requiresWorkflowCheck && workflowPhase === 'collecting' && workflowQuestions.length > 0 && (
+        <WorkflowCollector
+          questions={workflowQuestions}
+          answers={workflowAnswers}
+          onAnswerChange={handleWorkflowAnswer}
+          onComplete={handleWorkflowComplete}
+          currentQuestionIndex={currentWorkflowQuestion}
+          isLoading={isLoading}
+        />
+      )}
 
       {/* Área de entrada de mensagem */}
       <div className="bg-white border-t border-gray-200 p-4">
@@ -1865,10 +2051,12 @@ ${isApelacaoCriminal && totalDocuments < requiredDocuments ?
             value={currentMessage}
             onChange={(e) => setCurrentMessage(e.target.value)}
             onKeyPress={handleKeyPress}
-            disabled={isLoading || conversationPhase === 'completed'}
+            disabled={isLoading || conversationPhase === 'completed' || workflowPhase === 'collecting'}
             className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 disabled:opacity-50 text-gray-900"
             placeholder={
-              conversationPhase === 'ready' 
+              workflowPhase === 'collecting'
+                ? 'Respondendo às perguntas do workflow...'
+                : conversationPhase === 'ready' 
                 ? 'Digite GERAR para gerar o resultado...' 
                 : conversationPhase === 'completed'
                 ? 'Conversa finalizada'
@@ -1877,7 +2065,7 @@ ${isApelacaoCriminal && totalDocuments < requiredDocuments ?
           />
           <button
             onClick={sendMessage}
-            disabled={isLoading || !currentMessage.trim() || conversationPhase === 'completed'}
+            disabled={isLoading || !currentMessage.trim() || conversationPhase === 'completed' || workflowPhase === 'collecting'}
             className="bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg transition-colors flex items-center space-x-2"
           >
             {conversationPhase === 'ready' && currentMessage.toUpperCase() === 'GERAR' ? (
@@ -1893,6 +2081,36 @@ ${isApelacaoCriminal && totalDocuments < requiredDocuments ?
               </svg>
             )}
           </button>
+          {((conversationPhase === 'ready' || workflowPhase === 'ready') || (attachedDocuments.length > 0 && conversationPhase !== 'completed')) && (
+            <button
+              onClick={() => {
+                setCurrentMessage('GERAR');
+                sendMessage();
+              }}
+              disabled={isLoading || workflowPhase === 'collecting'}
+              className="bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg transition-colors flex items-center space-x-2"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+              <span className="text-sm font-medium">GERAR</span>
+            </button>
+          )}
+          {documentAnalysis && !validateSufficientInfo(documentAnalysis, documentAnalysis.missingInfo).sufficient && attachedDocuments.length > 0 && conversationPhase !== 'completed' && (
+            <button
+              onClick={() => {
+                setCurrentMessage('GERAR MESMO ASSIM');
+                sendMessage();
+              }}
+              disabled={isLoading || workflowPhase === 'collecting'}
+              className="bg-orange-600 hover:bg-orange-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg transition-colors flex items-center space-x-2"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+              </svg>
+              <span className="text-sm font-medium">GERAR MESMO ASSIM</span>
+            </button>
+          )}
         </div>
       </div>
 

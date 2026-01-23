@@ -18,18 +18,28 @@ const REQUIRED_INFORMATION = {
     crimes: {
       acusacoes: 'Crimes imputados',
       artigos: 'Artigos do Código Penal',
-      circunstancias: 'Circunstâncias agravantes/atenuantes'
+      apreensoes: 'Objetos apreendidos e quantidade',
+      qualificadoras: 'Circunstâncias qualificadoras',
+      circunstanciasJudiciais: 'Circunstâncias judiciais (art. 59 CP)',
+      atenuantes: 'Circunstâncias atenuantes (art. 65 CP)',
+      agravantes: 'Circunstâncias agravantes (art. 61 CP)',
+      concurso: 'Concurso de crimes (material/continuado)',
+      tentativa: 'Crime tentado ou consumado'
     },
     sentenca: {
       resultado: 'Resultado da sentença (condenação/absolvição)',
-      pena: 'Pena aplicada',
-      regime: 'Regime inicial',
-      data: 'Data da sentença'
+      pena: 'Pena aplicada (anos/meses/dias)',
+      regime: 'Regime inicial de cumprimento',
+      data: 'Data da sentença',
+      fundamentacao: 'Fundamentação da dosimetria',
+      causasDeAumento: 'Causas de aumento de pena',
+      causasDeDiminuicao: 'Causas de diminuição de pena'
     },
     defesa: {
       fundamentosPrincipais: 'Pontos principais de contestação',
       provasAFavor: 'Provas que favorecem o acusado',
-      circunstanciasPositivas: 'Circunstâncias positivas não reconhecidas'
+      circunstanciasPositivas: 'Circunstâncias positivas não reconhecidas',
+      tesesDefensivas: 'Teses defensivas apresentadas'
     }
   }
 };
@@ -46,12 +56,15 @@ const KEYWORDS_MAPPING = {
       'juízo', 'juiz', 'sentença'
     ],
     crimes: [
-      'crime', 'delito', 'tráfico', 'homicídio', 'roubo', 'furto',
-      'artigo', 'código penal', 'cp', 'lei', 'crime doloso'
+      'crime', 'delito', 'tráfico', 'artigo', 'código penal', 'cp', 'lei',
+      'apreendido', 'apreensão', 'drogas', 'arma', 'munição',
+      'qualificadora', 'qualificado', 'circunstância', 'agravante', 'atenuante',
+      'concurso', 'material', 'continuado', 'tentado', 'consumado'
     ],
     sentenca: [
       'condenado', 'absolvido', 'pena', 'anos', 'meses', 'regime',
-      'prisão', 'fechado', 'semiaberto', 'aberto', 'sentença'
+      'prisão', 'fechado', 'semiaberto', 'aberto', 'sentença',
+      'dosimetria', 'aumento', 'diminuição', 'causa'
     ],
     provas: [
       'testemunha', 'depoimento', 'prova', 'evidência', 'documento',
@@ -78,7 +91,55 @@ const preprocessDocument = (content) => {
     .replace(/réu/gi, 'acusado')
     .replace(/denunciado/gi, 'acusado')
     // Limitar tamanho para não exceder limites da API
-    .substring(0, 12000);
+    .substring(0, 800000); // Aumentado para processar documentos grandes (até ~400k palavras)
+};
+
+/**
+ * Faz uma requisição HTTP com retry e backoff exponencial
+ * @param {string} url - URL da requisição
+ * @param {Object} options - Opções da requisição fetch
+ * @param {number} maxRetries - Número máximo de tentativas (padrão: 3)
+ * @returns {Promise<Response>} Resposta da requisição
+ */
+const fetchWithRetry = async (url, options, maxRetries = 3) => {
+  let lastError;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await fetch(url, options);
+
+      // Se a resposta for bem-sucedida (status 2xx), retorna ela
+      if (response.ok) {
+        return response;
+      }
+
+      // Se for erro de rate limit (429), tentar novamente
+      if (response.status === 429) {
+        lastError = new Error(`Rate limit exceeded (attempt ${attempt + 1}/${maxRetries + 1})`);
+        if (attempt < maxRetries) {
+          const delay = Math.pow(2, attempt) * 1000; // Backoff exponencial: 1s, 2s, 4s
+          console.log(`⏳ Rate limit atingido, tentando novamente em ${delay}ms...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          continue;
+        }
+      }
+
+      // Para outros erros, não tentar novamente
+      return response;
+
+    } catch (error) {
+      lastError = error;
+      if (attempt < maxRetries) {
+        const delay = Math.pow(2, attempt) * 1000;
+        console.log(`⚠️ Erro de rede (tentativa ${attempt + 1}/${maxRetries + 1}), tentando novamente em ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        continue;
+      }
+    }
+  }
+
+  // Se todas as tentativas falharam, lançar o último erro
+  throw lastError;
 };
 
 /**
@@ -125,89 +186,200 @@ export const analyzeDocument = async (documentContent, promptType) => {
 };
 
 /**
- * Analisa documento especificamente para Apelação Criminal
+ * Analisa documento especificamente para Apelação Criminal com suporte a documentos grandes
  */
 const analyzeApelacaoCriminal = async (documentContent, hasMultipleDocs = false) => {
-  // Pré-processar o documento (aumentar limite para análise real)
-  const processedContent = documentContent
+  const MAX_CHUNK_SIZE = 200000; // ~100k palavras por chunk
+  const chunks = [];
+
+  // Dividir documento em chunks se for muito grande
+  if (documentContent.length > MAX_CHUNK_SIZE) {
+    console.log(`📊 Documento grande detectado (${documentContent.length} chars). Dividindo em chunks...`);
+
+    for (let i = 0; i < documentContent.length; i += MAX_CHUNK_SIZE) {
+      chunks.push(documentContent.substring(i, i + MAX_CHUNK_SIZE));
+    }
+
+    console.log(`📦 Criados ${chunks.length} chunks para análise`);
+  } else {
+    chunks.push(documentContent);
+  }
+
+  // Analisar cada chunk e combinar resultados
+  const allResults = [];
+  for (let i = 0; i < chunks.length; i++) {
+    console.log(`🔍 Analisando chunk ${i + 1}/${chunks.length}...`);
+
+    const chunkResult = await analyzeSingleChunk(chunks[i], hasMultipleDocs, i, chunks.length);
+
+    if (chunkResult) {
+      allResults.push(chunkResult);
+    }
+
+    // Aguardar entre chunks para evitar rate limits
+    if (i < chunks.length - 1) {
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    }
+  }
+
+  // Combinar resultados de todos os chunks
+  return combineAnalysisResults(allResults);
+};
+
+/**
+ * Analisa um único chunk do documento
+ */
+const analyzeSingleChunk = async (chunkContent, hasMultipleDocs, chunkIndex, totalChunks) => {
+  const processedContent = chunkContent
     .replace(/\s+/g, ' ')
     .replace(/art\.?\s*(\d+)/gi, 'artigo $1')
     .replace(/cód\.?\s*penal/gi, 'código penal')
     .replace(/cp\.?/gi, 'código penal')
     .replace(/réu/gi, 'acusado')
     .replace(/denunciado/gi, 'acusado')
-    .substring(0, 30000); // Aumentar limite para capturar mais conteúdo
+    .substring(0, 200000);
 
-  const docContext = hasMultipleDocs 
-    ? 'Você está recebendo MÚLTIPLOS DOCUMENTOS. Extraia informações COMPLETAS de TODOS eles em conjunto.'
-    : 'Você está recebendo UM ÚNICO DOCUMENTO.';
-  
+  const docContext = hasMultipleDocs
+    ? `Você está analisando PARTE ${chunkIndex + 1} de ${totalChunks} de MÚLTIPLOS DOCUMENTOS. Foque nas informações encontradas nesta parte específica.`
+    : `Você está analisando PARTE ${chunkIndex + 1} de ${totalChunks} do documento. Foque nas informações encontradas nesta parte específica.`;
+
   const analysisPrompt = `${docContext}
 
-TAREFA CRÍTICA: Analise PROFUNDAMENTE este documento jurídico de apelação criminal e extraia TODA informação encontrada.
+⚠️ INSTRUÇÕES CRÍTICAS - NÃO VIOLAR ⚠️
+1. EXTRAIA APENAS informações que apareçam EXPLICITAMENTE no documento
+2. SE UMA INFORMAÇÃO NÃO ESTIVER NO DOCUMENTO, DEIXE O CAMPO VAZIO ("")
+3. ⛔ NÃO INVENTE, SUPONHA, OU INFERA DADOS NUNCA
+4. ⛔ NÃO USE EXEMPLOS OU DADOS PADRÃO
+5. COPIE O TEXTO EXATO do documento para cada campo
+6. Se o documento não menciona algo, retorne string vazia ""
 
-INSTRUÇÕES ESSENCIAIS:
-1. ACUSADO/RÉU:
-   - Procure por "Acusado", "Réu", "Denunciado", "Investigado", "Indiciado"
-   - Nome pode estar em diferentes formatos: NOME COMPLETO, nome completo, "Nome Sobrenome"
-   - Procure por datas (sempre em formato dd/mm/yyyy)
-   - CPF/RG em números de 11 dígitos
+Analise este documento juridico e extraia informações para apelação criminal.
+SÓ COPIE DO DOCUMENTO, NÃO INVENTE:
 
-2. NÚMERO DO PROCESSO:
-   - Pode estar no cabeçalho, após "Processo:", "Autos:", "Ação:"
-   - Formatos: XXXXXXXX-XX.XXXX.X.XX.XXXX (20 dígitos) ou outros números longas sequências
-   - Pode estar em títulos ou cabeçalhos
+ACUSADO - COPIAR EXATAMENTE DO DOCUMENTO:
+- Nome completo (se não houver, deixar vazio)
+- Data de nascimento em formato dd/mm/yyyy (se não houver, deixar vazio)
+- CPF ou RG números exatos (se não houver, deixar vazio)
+- Endereço completo (se não houver, deixar vazio)
 
-3. CRIMES IMPUTADOS:
-   - Procure por: "crime de", "delito de", "acusação de", "imputado", "praticou"
-   - Nomes específicos: tráfico, homicídio, roubo, furto, estelionato, etc.
-   - LISTE TODOS os crimes mencionados
+PROCESSO - COPIAR EXATAMENTE DO DOCUMENTO:
+- Número do processo (se não houver, deixar vazio)
+- Comarca/Tribunal (se não houver, deixar vazio)
+- Nome do juiz (se não houver, deixar vazio)
 
-4. ARTIGOS DO CÓDIGO PENAL:
-   - Busque por "artigo", "art.", "CP", padrões como "art. 121", "art. 157"
-   - Retorne TODOS os números de artigos encontrados
+CRIMES - COPIAR EXATAMENTE DO DOCUMENTO:
+- Crimes acusados (o que está escrito no documento)
+- Números de artigos do Código Penal (o que está escrito)
+- Objetos apreendidos com quantidades exatas (conforme documento)
+- Circunstâncias qualificadoras (conforme documento, deixar vazio se não houver)
+- Circunstâncias judiciais art. 59 CP (conforme documento)
+- Circunstâncias atenuantes art. 65 CP (conforme documento)
+- Circunstâncias agravantes art. 61 CP (conforme documento)
+- Concurso de crimes (conforme documento)
+- Tentado ou consumado (conforme documento)
 
-5. SENTENÇA:
-   - Resultado: "condenado em", "absolvido de", "condenação", "absolvição"
-   - Pena: "condenado a X anos", "pena de X meses"
-   - Regime: "regime fechado", "semiaberto", "aberto", "prisão"
+SENTENÇA - COPIAR EXATAMENTE DO DOCUMENTO:
+- Resultado (conforme documento)
+- Pena exata (conforme documento)
+- Regime inicial (conforme documento)
+- Data da sentença (conforme documento)
+- Fundamentação dosimetria (conforme documento)
+- Causas de aumento (conforme documento)
+- Causas de diminuição (conforme documento)
 
-6. EVIDÊNCIAS:
-   - Testemunhas, depoimentos, perícias, laudos, apreensões, documentos
+DEFESA - COPIAR EXATAMENTE DO DOCUMENTO:
+- Argumentos de defesa (conforme documento)
+- Provas listadas (conforme documento)
+- Circunstâncias positivas (conforme documento)
+- Teses defensivas (conforme documento)
 
-DOCUMENTO PARA ANÁLISE:
+TESTEMUNHAS - COPIAR EXATAMENTE DO DOCUMENTO:
+- Nome da testemunha (conforme documento)
+- O que declarou (exato do documento)
+- Se acusação ou defesa (conforme documento)
+
+PERÍCIAS - COPIAR EXATAMENTE DO DOCUMENTO:
+- Tipo de perícia
+- Resultados
+- Conclusões
+
+Documento para análise (PARTE ${chunkIndex + 1}/${totalChunks}):
 ${processedContent}
 
-RETORNE EXATAMENTE neste formato JSON (deixe arrays vazios [] se não encontrar):
+RETORNE APENAS JSON COM DADOS REAIS:
+
 {
   "acusado": {
-    "nome": "nome encontrado ou vazio",
-    "dataNascimento": "dd/mm/yyyy ou vazio",
-    "cpf": "números ou vazio",
-    "endereco": "endereço ou vazio"
+    "nome": "COPIAR DO DOCUMENTO OU DEIXAR VAZIO",
+    "dataNascimento": "COPIAR DO DOCUMENTO OU DEIXAR VAZIO",
+    "cpf": "COPIAR DO DOCUMENTO OU DEIXAR VAZIO",
+    "endereco": "COPIAR DO DOCUMENTO OU DEIXAR VAZIO"
   },
   "processo": {
-    "numero": "número encontrado ou vazio",
-    "comarca": "comarca ou vazio",
-    "vara": "vara/tribunal ou vazio"
+    "numero": "COPIAR DO DOCUMENTO OU DEIXAR VAZIO",
+    "comarca": "COPIAR DO DOCUMENTO OU DEIXAR VAZIO",
+    "juiz": "COPIAR DO DOCUMENTO OU DEIXAR VAZIO"
   },
   "crimes": {
-    "acusacoes": ["crime1", "crime2", ... ou vazio],
-    "artigos": ["121", "157", ... ou vazio]
+    "acusacoes": ["LISTA DO DOCUMENTO OU []"],
+    "artigos": ["LISTA DO DOCUMENTO OU []"],
+    "apreensoes": "COPIAR DO DOCUMENTO OU DEIXAR VAZIO",
+    "qualificadoras": "COPIAR DO DOCUMENTO OU DEIXAR VAZIO",
+    "circunstanciasJudiciais": "COPIAR DO DOCUMENTO OU DEIXAR VAZIO",
+    "atenuantes": "COPIAR DO DOCUMENTO OU DEIXAR VAZIO",
+    "agravantes": "COPIAR DO DOCUMENTO OU DEIXAR VAZIO",
+    "concurso": "COPIAR DO DOCUMENTO OU DEIXAR VAZIO",
+    "tentativa": "COPIAR DO DOCUMENTO OU DEIXAR VAZIO"
   },
   "sentenca": {
-    "resultado": "condenado/absolvido ou vazio",
-    "pena": "descrição ou vazio",
-    "regime": "fechado/semiaberto/aberto ou vazio"
+    "resultado": "COPIAR DO DOCUMENTO OU DEIXAR VAZIO",
+    "pena": "COPIAR DO DOCUMENTO OU DEIXAR VAZIO",
+    "regime": "COPIAR DO DOCUMENTO OU DEIXAR VAZIO",
+    "data": "COPIAR DO DOCUMENTO OU DEIXAR VAZIO",
+    "fundamentacao": "COPIAR DO DOCUMENTO OU DEIXAR VAZIO",
+    "causasDeAumento": "COPIAR DO DOCUMENTO OU DEIXAR VAZIO",
+    "causasDeDiminuicao": "COPIAR DO DOCUMENTO OU DEIXAR VAZIO"
   },
-  "evidenciasEncontradas": ["tipo1", "tipo2", ... ou vazio]
+  "defesa": {
+    "fundamentosPrincipais": "COPIAR DO DOCUMENTO OU DEIXAR VAZIO",
+    "provasAFavor": "COPIAR DO DOCUMENTO OU DEIXAR VAZIO",
+    "circunstanciasPositivas": "COPIAR DO DOCUMENTO OU DEIXAR VAZIO",
+    "tesesDefensivas": "COPIAR DO DOCUMENTO OU DEIXAR VAZIO"
+  },
+  "testemunhas": [
+    {
+      "nome": "COPIAR DO DOCUMENTO",
+      "depoimento": "COPIAR DO DOCUMENTO",
+      "tipo": "COPIAR DO DOCUMENTO"
+    }
+  ],
+  "pericias": [
+    {
+      "tipo": "COPIAR DO DOCUMENTO",
+      "resultado": "COPIAR DO DOCUMENTO",
+      "conclusao": "COPIAR DO DOCUMENTO"
+    }
+  ]
 }`;
 
   try {
-    console.log('📝 Enviando para análise com IA OpenAI...');
-    console.log(`📊 Tamanho do conteúdo: ${processedContent.length} caracteres`);
-    
-    const response = await fetch(AI_CONFIG.API_URL, {
+    console.log(`📝 Enviando chunk ${chunkIndex + 1}/${totalChunks} para análise...`);
+
+    // ====== DEBUG LOGGING - O QUE ESTÁ SENDO ENVIADO ======
+    console.log('='.repeat(80));
+    console.log(`📋 CONTEÚDO ENVIADO PARA CHATGPT - CHUNK ${chunkIndex + 1}/${totalChunks}`);
+    console.log('='.repeat(80));
+    console.log({
+      caracteres: processedContent.length,
+      palavras: processedContent.split(/\s+/).length,
+      linhas: processedContent.split('\n').length,
+      primeiros500chars: processedContent.substring(0, 500),
+      ultimos500chars: processedContent.substring(Math.max(0, processedContent.length - 500))
+    });
+    console.log('PROMPT PREVIEW (primeiros 300 chars):', analysisPrompt.substring(0, 300));
+    console.log('='.repeat(80));
+
+    const response = await fetchWithRetry(AI_CONFIG.API_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -218,26 +390,25 @@ RETORNE EXATAMENTE neste formato JSON (deixe arrays vazios [] se não encontrar)
         messages: [
           {
             role: 'system',
-            content: `Você é um assistente jurídico ESPECIALISTA em análise de documentos processuais criminais.
-            
-TAREFAS:
-- Ler COMPLETAMENTE todos os textos fornecidos
-- Extrair TODAS as informações objetivas encontradas
-- Retornar SEMPRE um JSON válido e bem estruturado
-- NUNCA retornar null ou vazio para campos que têm informação no texto
-- Se não encontrar uma informação, deixe a string vazia "" ou o array vazio []
+            content: `Você é um EXTRATOR DE DADOS de documentos juridicos. REGRAS ABSOLUTAS:
 
-PRIORIDADE ABSOLUTA: Encontrar e retornar nomes, números de processos, crimes imputados, e penas.
+1. ⛔ NÃO INVENTE DADOS NUNCA
+2. ⛔ NÃO USE EXEMPLOS OU DADOS PADRÃO
+3. ⛔ NÃO INFERA OU SUPONHA INFORMAÇÕES
+4. ✅ COPIE TEXTO EXATO do documento para cada campo
+5. ✅ SE NÃO ENCONTRAR, DEIXE CAMPO VAZIO ("")
+6. ✅ RETORNE SEMPRE JSON VÁLIDO
 
-EXEMPLOS DE O QUE PROCURAR:
-- ACUSADOS: "FABRÍCIO DE OLIVEIRA", "BRUNO JUNIOR DOS SANTOS DIAS VIERO", "AYURI SIQUEIRA MORAES"
-- PROCESSOS: "50050421020248210109", "50059125520248210109", "5005926-39.2024.8.21.0109"
-- CRIMES: "tráfico de drogas", "associação para o tráfico", "associação para o tráfico de drogas"
-- ARTIGOS: "artigo 33", "artigo 35", "art. 121", "art. 157", "Lei nº 11.343/06"
-- DATAS: "31/07/1996", "19/04/2004", "02/05/1995"
-- CPF: "042.697.160-45", "059.120.990-08", "870.077.890-72"
+CRÍTICO: Cada valor NO JSON deve vir DIRETAMENTE do documento.
+- Nomes: copiar exatamente como aparecem
+- Datas: copiar exatamente conforme escrito
+- Números: copiar exatamente (artigos, CPF, etc)
+- Textos: copiar palavra por palavra do documento
+- Listas vazias: usar []
+- Strings vazias: usar ""
 
-IMPORTANTE: No texto fornecido há acusados, processos, crimes e artigos claramente mencionados. PROCURE por eles!`
+NUNCA faça o que a instrução anterior menciona (exemplos, padrões, inferências).
+Funcione como um SCANNER, não como um CRIADOR de dados.`
           },
           {
             role: 'user',
@@ -247,65 +418,136 @@ IMPORTANTE: No texto fornecido há acusados, processos, crimes e artigos clarame
         temperature: 0.2,
         max_tokens: 3000
       })
-    });
+    }, 3);
 
     if (!response.ok) {
-      console.error('❌ Erro na resposta da API:', response.status, response.statusText);
-      throw new Error(`Erro API OpenAI: ${response.status} - ${response.statusText}`);
+      console.error(`❌ Erro na análise do chunk ${chunkIndex + 1}:`, response.status, response.statusText);
+      return null;
     }
 
     const data = await response.json();
     const analysisText = data.choices[0].message.content.trim();
-    
-    console.log('📨 Resposta da IA recebida, fazendo parse...');
-    console.log('Primeiros 500 caracteres:', analysisText.substring(0, 500));
-    
-    // Parse JSON da resposta - com regex mais robusto
+
+    // ====== DEBUG LOGGING - O QUE CHATGPT RETORNOU ======
+    console.log('='.repeat(80));
+    console.log(`✅ RESPOSTA RECEBIDA DO CHATGPT - CHUNK ${chunkIndex + 1}/${totalChunks}`);
+    console.log('='.repeat(80));
+    console.log('RAW RESPONSE (primeiros 500 chars):', analysisText.substring(0, 500));
+    console.log('='.repeat(80));
+
+    // Parse JSON da resposta
     let extractedData = {};
     try {
-      // Tentar encontrar JSON entre chaves
       const jsonMatch = analysisText.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         extractedData = JSON.parse(jsonMatch[0]);
-        console.log('✅ JSON parseado com sucesso');
-      } else {
-        console.warn('⚠️ Nenhum JSON encontrado no texto');
-        extractedData = {};
+        console.log(`✅ JSON EXTRAÍDO CHUNK ${chunkIndex + 1}:`, JSON.stringify(extractedData, null, 2));
+        console.log(`✅ Chunk ${chunkIndex + 1} analisado com sucesso`);
       }
     } catch (parseError) {
-      console.warn('⚠️ Falha ao fazer parse do JSON, tentando parseJsonFlexible:', parseError);
-      extractedData = parseJsonFlexible(analysisText) || {};
+      console.warn(`⚠️ Falha ao fazer parse do JSON no chunk ${chunkIndex + 1}:`, parseError);
+      console.warn(`⚠️ Texto que falhou no parse:`, analysisText.substring(0, 300));
+      extractedData = {};
     }
 
-    // Log das informações extraídas
-    console.log('🔍 Informações extraídas:', {
-      acusado: extractedData.acusado?.nome || '(vazio)',
-      processo: extractedData.processo?.numero || '(vazio)',
-      crimes: extractedData.crimes?.acusacoes?.length || 0,
-      artigos: extractedData.crimes?.artigos?.length || 0,
-      resultado: extractedData.sentenca?.resultado || '(vazio)'
-    });
-
-    // Identificar informações faltantes
-    const missingInfo = identifyMissingInfo(extractedData, 'apelacao-criminal');
-    const hasAllInfo = missingInfo.length === 0;
-
-    console.log('📋 Análise concluída - Informações faltantes:', missingInfo.length, missingInfo);
-
-    return {
-      success: true,
-      extractedInfo: extractedData,
-      missingInfo: missingInfo,
-      hasAllInfo: hasAllInfo,
-      confidence: calculateConfidence(extractedData)
-    };
+    return extractedData;
 
   } catch (error) {
-    console.error('❌ Erro na análise via IA:', error);
-    console.log('🔄 Ativando análise por palavras-chave como fallback...');
-    // Fallback para análise básica por palavras-chave
-    return performKeywordAnalysis(documentContent, 'apelacao-criminal');
+    console.error(`❌ Erro ao analisar chunk ${chunkIndex + 1}:`, error);
+    return null;
   }
+};
+
+/**
+ * Combina resultados de múltiplas análises de chunks
+ */
+const combineAnalysisResults = (results) => {
+  const combined = {
+    acusado: {},
+    processo: {},
+    crimes: { acusacoes: [], artigos: [] },
+    sentenca: {},
+    defesa: {},
+    testemunhas: [],
+    pericias: [],
+    missingInfo: []
+  };
+
+  results.forEach(result => {
+    if (!result) return;
+
+    // Combinar acusado
+    if (result.acusado) {
+      if (result.acusado.nome && !combined.acusado.nome) combined.acusado.nome = result.acusado.nome;
+      if (result.acusado.dataNascimento && !combined.acusado.dataNascimento) combined.acusado.dataNascimento = result.acusado.dataNascimento;
+      if (result.acusado.cpf && !combined.acusado.cpf) combined.acusado.cpf = result.acusado.cpf;
+      if (result.acusado.endereco && !combined.acusado.endereco) combined.acusado.endereco = result.acusado.endereco;
+    }
+
+    // Combinar processo
+    if (result.processo) {
+      if (result.processo.numero && !combined.processo.numero) combined.processo.numero = result.processo.numero;
+      if (result.processo.comarca && !combined.processo.comarca) combined.processo.comarca = result.processo.comarca;
+      if (result.processo.juiz && !combined.processo.juiz) combined.processo.juiz = result.processo.juiz;
+    }
+
+    // Combinar crimes
+    if (result.crimes) {
+      if (result.crimes.acusacoes) combined.crimes.acusacoes.push(...result.crimes.acusacoes);
+      if (result.crimes.artigos) combined.crimes.artigos.push(...result.crimes.artigos);
+      if (result.crimes.apreensoes && !combined.crimes.apreensoes) combined.crimes.apreensoes = result.crimes.apreensoes;
+      if (result.crimes.qualificadoras && !combined.crimes.qualificadoras) combined.crimes.qualificadoras = result.crimes.qualificadoras;
+      if (result.crimes.circunstanciasJudiciais && !combined.crimes.circunstanciasJudiciais) combined.crimes.circunstanciasJudiciais = result.crimes.circunstanciasJudiciais;
+      if (result.crimes.atenuantes && !combined.crimes.atenuantes) combined.crimes.atenuantes = result.crimes.atenuantes;
+      if (result.crimes.agravantes && !combined.crimes.agravantes) combined.crimes.agravantes = result.crimes.agravantes;
+      if (result.crimes.concurso && !combined.crimes.concurso) combined.crimes.concurso = result.crimes.concurso;
+      if (result.crimes.tentativa && !combined.crimes.tentativa) combined.crimes.tentativa = result.crimes.tentativa;
+    }
+
+    // Combinar sentença
+    if (result.sentenca) {
+      if (result.sentenca.resultado && !combined.sentenca.resultado) combined.sentenca.resultado = result.sentenca.resultado;
+      if (result.sentenca.pena && !combined.sentenca.pena) combined.sentenca.pena = result.sentenca.pena;
+      if (result.sentenca.regime && !combined.sentenca.regime) combined.sentenca.regime = result.sentenca.regime;
+      if (result.sentenca.data && !combined.sentenca.data) combined.sentenca.data = result.sentenca.data;
+      if (result.sentenca.fundamentacao && !combined.sentenca.fundamentacao) combined.sentenca.fundamentacao = result.sentenca.fundamentacao;
+      if (result.sentenca.causasDeAumento && !combined.sentenca.causasDeAumento) combined.sentenca.causasDeAumento = result.sentenca.causasDeAumento;
+      if (result.sentenca.causasDeDiminuicao && !combined.sentenca.causasDeDiminuicao) combined.sentenca.causasDeDiminuicao = result.sentenca.causasDeDiminuicao;
+    }
+
+    // Combinar defesa
+    if (result.defesa) {
+      if (result.defesa.fundamentosPrincipais && !combined.defesa.fundamentosPrincipais) combined.defesa.fundamentosPrincipais = result.defesa.fundamentosPrincipais;
+      if (result.defesa.provasAFavor && !combined.defesa.provasAFavor) combined.defesa.provasAFavor = result.defesa.provasAFavor;
+      if (result.defesa.circunstanciasPositivas && !combined.defesa.circunstanciasPositivas) combined.defesa.circunstanciasPositivas = result.defesa.circunstanciasPositivas;
+      if (result.defesa.tesesDefensivas && !combined.defesa.tesesDefensivas) combined.defesa.tesesDefensivas = result.defesa.tesesDefensivas;
+    }
+
+    // Combinar testemunhas e perícias
+    if (result.testemunhas) combined.testemunhas.push(...result.testemunhas);
+    if (result.pericias) combined.pericias.push(...result.pericias);
+  });
+
+  // Remover duplicatas
+  combined.crimes.acusacoes = [...new Set(combined.crimes.acusacoes)];
+  combined.crimes.artigos = [...new Set(combined.crimes.artigos)];
+  combined.testemunhas = combined.testemunhas.filter((t, index, self) =>
+    index === self.findIndex(other => other.nome === t.nome)
+  );
+  combined.pericias = combined.pericias.filter((p, index, self) =>
+    index === self.findIndex(other => other.tipo === p.tipo)
+  );
+
+  // Identificar informações faltantes (usar tipo padrão: apelacao-criminal)
+  combined.missingInfo = identifyMissingInfo(combined, 'apelacao-criminal');
+
+  console.log('✅ Análise combinada concluída:', {
+    testemunhas: combined.testemunhas.length,
+    pericias: combined.pericias.length,
+    crimes: combined.crimes.acusacoes.length
+  });
+
+  return combined;
 };
 
 /**
@@ -617,6 +859,9 @@ export const generateDocumentAnalysisMessage = (analysis, questions) => {
 export const validateSufficientInfo = (analysis, missingInfo) => {
   if (!analysis) return false;
   
+  // Se missingInfo não for um array, inicializar como array vazio
+  const missing = Array.isArray(missingInfo) ? missingInfo : [];
+  
   const criticalFields = [
     'acusado.nome',
     'processo.numero',
@@ -624,7 +869,7 @@ export const validateSufficientInfo = (analysis, missingInfo) => {
     'sentenca.resultado'
   ];
 
-  const missingCritical = missingInfo.filter(info => 
+  const missingCritical = missing.filter(info => 
     criticalFields.includes(`${info.category}.${info.field}`)
   );
 
@@ -751,6 +996,107 @@ const parseJsonFlexible = (text) => {
   } catch (error) {
     return {};
   }
+};
+
+/**
+ * Combina o prompt base com as informações extraídas dos documentos
+ */
+export const injectDocumentInfoIntoPrompt = (basePrompt, extractedInfo) => {
+  if (!extractedInfo || Object.keys(extractedInfo).length === 0) {
+    return basePrompt;
+  }
+
+  // Criar seção de informações dos documentos
+  let documentInfoSection = '\n\n---\n\n**INFORMAÇÕES EXTRAÍDAS DOS DOCUMENTOS ANEXADOS:**\n\n';
+
+  if (extractedInfo.acusado) {
+    documentInfoSection += '**ACUSADO:**\n';
+    if (extractedInfo.acusado.nome) documentInfoSection += `- Nome: ${extractedInfo.acusado.nome}\n`;
+    if (extractedInfo.acusado.dataNascimento) documentInfoSection += `- Data de nascimento: ${extractedInfo.acusado.dataNascimento}\n`;
+    if (extractedInfo.acusado.cpf) documentInfoSection += `- CPF/RG: ${extractedInfo.acusado.cpf}\n`;
+    if (extractedInfo.acusado.endereco) documentInfoSection += `- Endereço: ${extractedInfo.acusado.endereco}\n`;
+    documentInfoSection += '\n';
+  }
+
+  if (extractedInfo.processo) {
+    documentInfoSection += '**PROCESSO:**\n';
+    if (extractedInfo.processo.numero) documentInfoSection += `- Número: ${extractedInfo.processo.numero}\n`;
+    if (extractedInfo.processo.comarca) documentInfoSection += `- Comarca: ${extractedInfo.processo.comarca}\n`;
+    if (extractedInfo.processo.vara) documentInfoSection += `- Vara/Tribunal: ${extractedInfo.processo.vara}\n`;
+    documentInfoSection += '\n';
+  }
+
+  if (extractedInfo.crimes) {
+    documentInfoSection += '**CRIMES E CIRCUNSTÂNCIAS:**\n';
+    if (extractedInfo.crimes.acusacoes && extractedInfo.crimes.acusacoes.length > 0) {
+      documentInfoSection += `- Crimes imputados: ${extractedInfo.crimes.acusacoes.join(', ')}\n`;
+    }
+    if (extractedInfo.crimes.artigos && extractedInfo.crimes.artigos.length > 0) {
+      documentInfoSection += `- Artigos do Código Penal: ${extractedInfo.crimes.artigos.join(', ')}\n`;
+    }
+    if (extractedInfo.crimes.apreensoes) documentInfoSection += `- Apreensões: ${extractedInfo.crimes.apreensoes}\n`;
+    if (extractedInfo.crimes.qualificadoras) documentInfoSection += `- Circunstâncias qualificadoras: ${extractedInfo.crimes.qualificadoras}\n`;
+    if (extractedInfo.crimes.circunstanciasJudiciais) documentInfoSection += `- Circunstâncias judiciais: ${extractedInfo.crimes.circunstanciasJudiciais}\n`;
+    if (extractedInfo.crimes.atenuantes) documentInfoSection += `- Circunstâncias atenuantes: ${extractedInfo.crimes.atenuantes}\n`;
+    if (extractedInfo.crimes.agravantes) documentInfoSection += `- Circunstâncias agravantes: ${extractedInfo.crimes.agravantes}\n`;
+    if (extractedInfo.crimes.concurso) documentInfoSection += `- Concurso de crimes: ${extractedInfo.crimes.concurso}\n`;
+    if (extractedInfo.crimes.tentativa) documentInfoSection += `- Crime tentado/consumado: ${extractedInfo.crimes.tentativa}\n`;
+    documentInfoSection += '\n';
+  }
+
+  if (extractedInfo.sentenca) {
+    documentInfoSection += '**SENTENÇA:**\n';
+    if (extractedInfo.sentenca.resultado) documentInfoSection += `- Resultado: ${extractedInfo.sentenca.resultado}\n`;
+    if (extractedInfo.sentenca.pena) documentInfoSection += `- Pena aplicada: ${extractedInfo.sentenca.pena}\n`;
+    if (extractedInfo.sentenca.regime) documentInfoSection += `- Regime inicial: ${extractedInfo.sentenca.regime}\n`;
+    if (extractedInfo.sentenca.data) documentInfoSection += `- Data da sentença: ${extractedInfo.sentenca.data}\n`;
+    if (extractedInfo.sentenca.fundamentacao) documentInfoSection += `- Fundamentação da dosimetria: ${extractedInfo.sentenca.fundamentacao}\n`;
+    if (extractedInfo.sentenca.causasDeAumento) documentInfoSection += `- Causas de aumento: ${extractedInfo.sentenca.causasDeAumento}\n`;
+    if (extractedInfo.sentenca.causasDeDiminuicao) documentInfoSection += `- Causas de diminuição: ${extractedInfo.sentenca.causasDeDiminuicao}\n`;
+    documentInfoSection += '\n';
+  }
+
+  if (extractedInfo.defesa) {
+    documentInfoSection += '**DEFESA:**\n';
+    if (extractedInfo.defesa.fundamentosPrincipais) documentInfoSection += `- Fundamentos principais: ${extractedInfo.defesa.fundamentosPrincipais}\n`;
+    if (extractedInfo.defesa.provasAFavor) documentInfoSection += `- Provas favoráveis: ${extractedInfo.defesa.provasAFavor}\n`;
+    if (extractedInfo.defesa.circunstanciasPositivas) documentInfoSection += `- Circunstâncias positivas: ${extractedInfo.defesa.circunstanciasPositivas}\n`;
+    if (extractedInfo.defesa.tesesDefensivas) documentInfoSection += `- Teses defensivas: ${extractedInfo.defesa.tesesDefensivas}\n`;
+    documentInfoSection += '\n';
+  }
+
+  if (extractedInfo.testemunhas && extractedInfo.testemunhas.length > 0) {
+    documentInfoSection += '**TESTEMUNHAS E DEPOIMENTOS:**\n';
+    extractedInfo.testemunhas.forEach((testemunha, index) => {
+      documentInfoSection += `${index + 1}. ${testemunha.nome} (${testemunha.tipo}): ${testemunha.depoimento}\n`;
+    });
+    documentInfoSection += '\n';
+  }
+
+  if (extractedInfo.pericias && extractedInfo.pericias.length > 0) {
+    documentInfoSection += '**PERÍCIAS E LAUDOS:**\n';
+    extractedInfo.pericias.forEach((pericia, index) => {
+      documentInfoSection += `${index + 1}. ${pericia.tipo}: ${pericia.resultado} - Conclusão: ${pericia.conclusao}\n`;
+    });
+    documentInfoSection += '\n';
+  }
+
+  if (extractedInfo.evidenciasEncontradas && extractedInfo.evidenciasEncontradas.length > 0) {
+    documentInfoSection += '**EVIDÊNCIAS/APREENSÕES:**\n';
+    documentInfoSection += `- ${extractedInfo.evidenciasEncontradas.join(', ')}\n\n`;
+  }
+
+  documentInfoSection += '**IMPORTANTE:** Use APENAS essas informações dos documentos. Não invente fatos, nomes ou detalhes que não estejam listados acima. Sempre que citar algo específico, mencione que está baseado nos documentos anexados.\n\n---\n\n';
+
+  // Inserir a seção de informações dos documentos no prompt base
+  // Procurar onde inserir - após as diretrizes principais mas antes da estrutura
+  const insertPoint = basePrompt.indexOf('## ESTRUTURA DAS RAZÕES DE APELAÇÃO');
+  if (insertPoint !== -1) {
+    return basePrompt.substring(0, insertPoint) + documentInfoSection + basePrompt.substring(insertPoint);
+  }
+
+  // Fallback: inserir no final
+  return basePrompt + documentInfoSection;
 };
 
 export default {

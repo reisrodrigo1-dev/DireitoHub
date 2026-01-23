@@ -1,8 +1,10 @@
 // Configurações da API de IA
 export const AI_CONFIG = {
   API_KEY: import.meta.env.VITE_OPENAI_API_KEY || '',
-  API_URL: 'https://api.openai.com/v1/chat/completions',
-  MODEL: 'gpt-3.5-turbo',
+  API_URL: '/api/openai/chat/completions', // Proxy através do Vite
+  MODELS_URL: '/api/openai/models', // Proxy para validação
+  EMBEDDINGS_URL: '/api/openai/embeddings', // Proxy para embeddings
+  MODEL: 'gpt-4o-mini',
   MAX_TOKENS: {
     ANALYSIS: 2000,
     PROMPT_PROCESSING: 3000,
@@ -76,19 +78,19 @@ export const PROMPT_SPECIFIC_CONFIG = {
   },
   'apelacao-criminal': {
     model: 'gpt-4o-mini',
-    maxTokens: 50000, // 14 partes × 3500 tokens = ~49k tokens
-    chunkSize: 3500,
-    temperature: 0.5, // Menor temperatura para maior consistência técnica
-    useRAG: false,
+    maxTokens: 20000, // Reduzido para respostas mais concisas
+    chunkSize: 2000, // Partes menores para maior foco
+    temperature: 0.3, // Manter consistência
+    useRAG: true,
     ragConfig: {
       embeddingModel: 'text-embedding-ada-002',
       vectorStore: 'firebase',
-      topK: 15,
-      similarityThreshold: 0.85
+      topK: 15, // Reduzido para foco nas informações mais relevantes
+      similarityThreshold: 0.8
     },
-    chunkingStrategy: 'fixed',
+    chunkingStrategy: 'semantic',
     multiPartGeneration: true,
-    numberOfParts: 14
+    numberOfParts: 8 // Menos partes para resposta mais coesa
   },
   'contestacao': {
     model: 'gpt-3.5-turbo',

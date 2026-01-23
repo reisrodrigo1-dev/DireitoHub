@@ -13,6 +13,24 @@ if (typeof window !== 'undefined') {
 // Verificar se estamos no browser ou Node.js
 const isBrowser = typeof window !== 'undefined';
 
+// Configurações otimizadas por tipo de documento
+const DOCUMENT_OPTIMIZATIONS = {
+  'apelacao-criminal': {
+    ocrThreshold: 0.7, // Threshold mais alto para apelações (70% - mais tolerante a caracteres especiais)
+    preferDirectExtraction: true,
+    batchSize: 20, // Processar mais páginas por lote para PDFs grandes
+    concurrentPages: 5, // Menos concorrência para estabilidade
+    samplePages: 5 // Amostrar mais páginas para detecção mais precisa
+  },
+  'default': {
+    ocrThreshold: 0.5,
+    preferDirectExtraction: true,
+    batchSize: 10,
+    concurrentPages: 10,
+    samplePages: 3
+  }
+};
+
 // Função para ler arquivos de texto simples
 const readTextFile = (file) => {
   return new Promise((resolve, reject) => {
@@ -35,17 +53,84 @@ const readWordFile = async (file) => {
   }
 };
 
-// Função para detectar se o texto extraído precisa de OCR
-const detectNeedsOCR = (text) => {
+// Função melhorada para detectar se o texto extraído precisa de OCR
+// Otimizada para documentos jurídicos brasileiros
+const detectNeedsOCR = (text, documentType = 'default') => {
   if (!text || text.trim().length === 0) return true;
   
-  // Contar caracteres não-texto (símbolos estranhos, caracteres de controle)
-  const nonTextChars = text.match(/[^\w\s.,;:!?()[\]{}"'-]/g) || [];
-  const totalChars = text.length;
+  const config = DOCUMENT_OPTIMIZATIONS[documentType] || DOCUMENT_OPTIMIZATIONS.default;
+  
+  // Para documentos jurídicos, permitir mais caracteres especiais
+  // Caracteres comuns em documentos jurídicos brasileiros
+  const legalSpecialChars = /[§ºª°\.\-\,\;\:\!\?\(\)\[\]\{\}\"\'\d]/g;
+  const textWithoutLegalChars = text.replace(legalSpecialChars, '');
+  
+  // Contar caracteres não-texto (excluindo caracteres jurídicos comuns)
+  const nonTextChars = textWithoutLegalChars.match(/[^\w\s]/g) || [];
+  const totalChars = textWithoutLegalChars.length;
+  
+  if (totalChars === 0) return true; // Se só tinha caracteres especiais, provavelmente precisa OCR
+  
   const nonTextRatio = nonTextChars.length / totalChars;
   
-  // Se mais de 30% dos caracteres são não-texto, provavelmente precisa de OCR
-  return nonTextRatio > 0.3;
+  // Usar threshold específico do tipo de documento
+  const needsOCR = nonTextRatio > config.ocrThreshold;
+  
+  console.log(`🔍 Análise OCR (${documentType}): ${nonTextChars.length}/${totalChars} caracteres não-texto (${(nonTextRatio * 100).toFixed(1)}%) - OCR ${needsOCR ? 'NECESSÁRIO' : 'NÃO NECESSÁRIO'}`);
+  
+  return needsOCR;
+};
+
+// Função otimizada para extração rápida de texto direto (sem OCR)
+const extractTextDirectFast = async (pdf, documentType = 'default') => {
+  console.log('⚡ Iniciando extração direta rápida de texto');
+  
+  let extractedText = '';
+  const totalPages = pdf.numPages;
+  
+  // Configurações baseadas no tipo de documento
+  const config = DOCUMENT_OPTIMIZATIONS[documentType] || DOCUMENT_OPTIMIZATIONS.default;
+  const batchSize = config.batchSize || 10;
+  
+  // Processar em lotes otimizados para melhor performance
+  for (let batchStart = 1; batchStart <= totalPages; batchStart += batchSize) {
+    const batchEnd = Math.min(batchStart + batchSize - 1, totalPages);
+    console.log(`📄 Processando lote: páginas ${batchStart}-${batchEnd}/${totalPages}`);
+    
+    const pagePromises = [];
+    for (let pageNum = batchStart; pageNum <= batchEnd; pageNum++) {
+      pagePromises.push(
+        pdf.getPage(pageNum).then(page => 
+          page.getTextContent().then(textContent => ({
+            pageNum,
+            text: textContent.items.map(item => item.str).join(' ')
+          }))
+        ).catch(error => {
+          console.warn(`⚠️ Erro na página ${pageNum}:`, error);
+          return { pageNum, text: '' };
+        })
+      );
+    }
+    
+    // Aguardar todas as páginas do lote
+    const batchResults = await Promise.allSettled(pagePromises);
+    
+    // Ordenar por número da página e juntar
+    batchResults.sort((a, b) => {
+      const pageA = a.status === 'fulfilled' ? a.value.pageNum : 0;
+      const pageB = b.status === 'fulfilled' ? b.value.pageNum : 0;
+      return pageA - pageB;
+    });
+    
+    for (const result of batchResults) {
+      if (result.status === 'fulfilled') {
+        extractedText += result.value.text + '\n';
+      }
+    }
+  }
+  
+  console.log(`✅ Extração direta concluída: ${extractedText.length} caracteres de ${totalPages} páginas`);
+  return extractedText;
 };
 
 // Função para renderizar página PDF como imagem com tratamento de erros
@@ -167,7 +252,7 @@ const performOCR = async (imageData, language = 'por+eng', memoryOptimized = fal
 };
 
 // Função para processar páginas PDF com OCR se necessário
-const processPDFPagesWithOCR = async (pdf, maxPages = 20, concurrentChunks = 10, quality = 'medium') => {
+const processPDFPagesWithOCR = async (pdf, maxPages = 20, concurrentChunks = 10, quality = 'medium', documentType = 'default') => {
   const scale = quality === 'high' ? 3.0 : quality === 'low' ? 1.5 : 2.0; // DPI aproximado: high=450, medium=300, low=225
 
   let extractedText = '';
@@ -175,7 +260,8 @@ const processPDFPagesWithOCR = async (pdf, maxPages = 20, concurrentChunks = 10,
   let totalPages = 0;
 
   // Primeiro, tentar extrair texto diretamente das primeiras páginas
-  const samplePages = Math.min(3, pdf.numPages);
+  const config = DOCUMENT_OPTIMIZATIONS[documentType] || DOCUMENT_OPTIMIZATIONS.default;
+  const samplePages = Math.min(config.samplePages || 3, pdf.numPages);
   let sampleText = '';
 
   for (let i = 1; i <= samplePages; i++) {
@@ -189,25 +275,13 @@ const processPDFPagesWithOCR = async (pdf, maxPages = 20, concurrentChunks = 10,
     }
   }
 
-  const needsOCR = detectNeedsOCR(sampleText);
+  const needsOCR = detectNeedsOCR(sampleText, documentType);
   console.log(`🔍 Detecção OCR: ${needsOCR ? 'NECESSÁRIO' : 'NÃO NECESSÁRIO'} (amostra de ${samplePages} páginas)`);
 
   if (!needsOCR) {
-    // Extrair texto diretamente de TODAS as páginas (sem limite)
+    // Usar extração direta otimizada
+    extractedText = await extractTextDirectFast(pdf, documentType);
     totalPages = pdf.numPages;
-    console.log(`📚 Extraindo texto direto de TODAS as ${totalPages} páginas`);
-
-    for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
-      try {
-        const page = await pdf.getPage(pageNum);
-        const textContent = await page.getTextContent();
-        const pageText = textContent.items.map(item => item.str).join(' ');
-        extractedText += pageText + '\n';
-        console.log(`📄 Página ${pageNum}/${totalPages}: ${pageText.length} caracteres (texto direto)`);
-      } catch (pageError) {
-        console.warn(`⚠️ Erro ao processar página ${pageNum}:`, pageError);
-      }
-    }
   } else {
     // Usar OCR - agora com suporte para processamento completo
     const forceFullOCR = maxPages === -1; // -1 significa processar todas as páginas
@@ -484,7 +558,7 @@ export const processLargePDFWithOCR = async (file, options = {}) => {
 };
 
 // Função para ler PDFs com extração real de texto e OCR automático
-const readPDFFile = async (file, options = {}) => {
+const readPDFFile = async (file, options = {}, documentType = 'default') => {
   const {
     maxPages = 20,
     concurrentChunks = 10,
@@ -516,7 +590,7 @@ const readPDFFile = async (file, options = {}) => {
     // Determinar se deve processar todas as páginas
     const actualMaxPages = forceFullOCR ? -1 : maxPages;
     
-    const { text: extractedText, usedOCR, totalPages } = await processPDFPagesWithOCR(pdf, actualMaxPages, concurrentChunks, quality);
+    const { text: extractedText, usedOCR, totalPages } = await processPDFPagesWithOCR(pdf, actualMaxPages, concurrentChunks, quality, documentType);
     
     if (!extractedText || extractedText.trim().length === 0) {
       console.error('❌ Nenhum texto foi extraído do PDF');
@@ -575,7 +649,7 @@ const readPDFFile = async (file, options = {}) => {
 };
 
 // Função principal para processar qualquer tipo de documento
-export const processDocument = async (file, options = {}) => {
+export const processDocument = async (file, options = {}, documentType = 'default') => {
   if (!file) {
     throw new Error('Nenhum arquivo fornecido');
   }
@@ -605,28 +679,54 @@ export const processDocument = async (file, options = {}) => {
       case 'pdf':
         console.log('📂 Iniciando leitura de PDF...');
 
-        // Verificar se é um PDF grande que se beneficiaria do processamento otimizado
+        // Carregar PDF para análise preliminar
         const arrayBuffer = await file.arrayBuffer();
         const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-        const isLargePDF = pdf.numPages > 100; // PDFs com mais de 100 páginas
-
+        
+        // Verificar se é um PDF grande
+        const isLargePDF = pdf.numPages > 100;
+        
+        // Para PDFs grandes, verificar se realmente precisa de OCR
         if (isLargePDF) {
-          console.log(`📊 PDF grande detectado (${pdf.numPages} páginas), usando processamento otimizado`);
-          const result = await processLargePDFWithOCR(file, options);
-          if (result.success) {
-            content = result.text;
+          // Amostrar primeiras páginas para detectar necessidade de OCR
+          let sampleText = '';
+          const samplePages = Math.min(5, pdf.numPages);
+          
+          for (let i = 1; i <= samplePages; i++) {
+            try {
+              const page = await pdf.getPage(i);
+              const textContent = await page.getTextContent();
+              const pageText = textContent.items.map(item => item.str).join(' ');
+              sampleText += pageText + '\n';
+            } catch (error) {
+              console.warn(`Erro ao amostrar página ${i}:`, error);
+            }
+          }
+          
+          const needsOCR = detectNeedsOCR(sampleText, documentType);
+          
+          if (!needsOCR) {
+            console.log(`📊 PDF grande (${pdf.numPages} páginas) NÃO precisa de OCR - usando extração direta rápida`);
+            content = await extractTextDirectFast(pdf, documentType);
           } else {
-            throw new Error(result.error || 'Erro no processamento otimizado do PDF');
+            console.log(`📊 PDF grande (${pdf.numPages} páginas) precisa de OCR - usando processamento otimizado`);
+            const result = await processLargePDFWithOCR(file, options);
+            if (result.success) {
+              content = result.text;
+            } else {
+              throw new Error(result.error || 'Erro no processamento otimizado do PDF');
+            }
           }
         } else {
-          content = await readPDFFile(file, options);
+          // PDFs pequenos - usar processamento normal com tipo de documento
+          content = await readPDFFile(file, options, documentType);
         }
 
         console.log('✅ Conteúdo do PDF retornado:', {
           length: content.length,
           firstChars: content.substring(0, 100),
           isWarning: content.includes('AVISO'),
-          method: isLargePDF ? 'OCR Otimizado' : 'Padrão'
+          method: isLargePDF ? (content.includes('⚡') ? 'Extração Direta Rápida' : 'OCR Otimizado') : 'Padrão'
         });
         break;
       
@@ -639,11 +739,8 @@ export const processDocument = async (file, options = {}) => {
       throw new Error('O documento está vazio ou não pôde ser lido');
     }
 
-    // Limitar tamanho do conteúdo
-    const maxContentLength = 50000; // 50k caracteres
-    if (content.length > maxContentLength) {
-      content = content.substring(0, maxContentLength) + '\n\n[DOCUMENTO TRUNCADO - MUITO LONGO]';
-    }
+    // Removido limite de tamanho - processar conteúdo completo
+    console.log(`📊 Documento processado: ${content.length} caracteres`);
 
     const result = {
       success: true,

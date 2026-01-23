@@ -42,7 +42,7 @@ const validateAPIKey = () => {
 export const sendMessageToAI = async (messages, promptType = null) => {
   try {
     validateAPIKey();
-    
+
     let systemMessage = {
       role: 'system',
       content: 'Você é um assistente jurídico especializado em direito brasileiro. Você deve fornecer respostas precisas, fundamentadas e em linguagem jurídica adequada. Sempre cite as leis, artigos e jurisprudências relevantes quando possível.'
@@ -56,8 +56,7 @@ export const sendMessageToAI = async (messages, promptType = null) => {
     const response = await fetch(API_URL, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${API_KEY}`
+        'Content-Type': 'application/json'
       },
       body: JSON.stringify({
         model: MODEL,
@@ -131,12 +130,13 @@ const getSystemMessageForPromptType = (promptType) => {
 // Função para validar chave da API
 export const validateApiKey = async () => {
   try {
-    const response = await fetch('https://api.openai.com/v1/models', {
+    const response = await fetch(AI_CONFIG.MODELS_URL, {
+      method: 'GET',
       headers: {
-        'Authorization': `Bearer ${OPENAI_API_KEY}`
+        'Content-Type': 'application/json'
       }
     });
-    
+
     return response.ok;
   } catch (error) {
     console.error('Erro ao validar chave da API:', error);
@@ -188,8 +188,7 @@ Formato da resposta:
     const response = await fetch(API_URL, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${API_KEY}`
+        'Content-Type': 'application/json'
       },
       body: JSON.stringify({
         model: MODEL,
@@ -248,8 +247,7 @@ Agora execute o prompt/template com base nas informações fornecidas:`
     const response = await fetch(API_URL, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${API_KEY}`
+        'Content-Type': 'application/json'
       },
       body: JSON.stringify({
         model: MODEL,
@@ -475,8 +473,7 @@ Pergunta 1 de 4: [pergunta específica sobre algo essencial do template]
     const response = await fetch(API_URL, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${API_KEY}`
+        'Content-Type': 'application/json'
       },
       body: JSON.stringify({
         model: MODEL,
@@ -587,8 +584,7 @@ EVITE:
     const response = await fetch(API_URL, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${API_KEY}`
+        'Content-Type': 'application/json'
       },
       body: JSON.stringify({
         model: MODEL,
@@ -723,18 +719,28 @@ export const generateFinalResult = async (promptType, promptContent, collectedDa
 
     console.log('📝 Informações formatadas:', collectedInfo);
 
-    // Preparar contexto dos documentos anexados
+    // Preparar contexto dos documentos anexados com RAG inteligente
     const safeAttachedDocuments = attachedDocuments || [];
     let documentsSection = '';
     if (safeAttachedDocuments.length > 0) {
-      documentsSection = `\n\nDOCUMENTOS ANEXADOS:
-${safeAttachedDocuments.map((doc, index) => 
-  `${index + 1}. **${doc.fileName}** (${doc.fileType.toUpperCase()})
-${doc.content.substring(0, 3000)}${doc.content.length > 3000 ? '...' : ''}`
-).join('\n\n')}
+      // Verificar se algum documento é muito grande (> 50k tokens estimados)
+      const hasLargeDocuments = safeAttachedDocuments.some(doc =>
+        estimateTokens(doc.content) > 10000 // ~25k caracteres
+      );
 
-IMPORTANTE: Use os documentos anexados como base principal para a análise e geração do resultado.`;
-      
+      if (hasLargeDocuments) {
+        console.log('📊 Documentos grandes detectados - usando RAG inteligente');
+        documentsSection = `\n\nDOCUMENTOS ANEXADOS (Seleção Inteligente):
+${selectRelevantDocumentChunks(safeAttachedDocuments, promptType.id, 15000)}`;
+      } else {
+        // Documentos pequenos - incluir completos
+        documentsSection = `\n\nDOCUMENTOS ANEXADOS:
+${safeAttachedDocuments.map((doc, index) =>
+  `${index + 1}. **${doc.fileName}** (${doc.fileType.toUpperCase()})
+${doc.content.substring(0, 50000)}${doc.content.length > 50000 ? '...' : ''}`
+).join('\n\n')}`;
+      }
+
       console.log('📄 Documentos incluídos no contexto:', safeAttachedDocuments.length);
     }
 
@@ -797,8 +803,7 @@ INSTRUÇÕES:
     const response = await fetch(API_URL, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${API_KEY}`
+        'Content-Type': 'application/json'
       },
       body: JSON.stringify({
         model: MODEL,
@@ -940,8 +945,7 @@ const testAPIConnection = async () => {
     const response = await fetch(API_URL, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${API_KEY}`
+        'Content-Type': 'application/json'
       },
       body: JSON.stringify({
         model: MODEL,
@@ -980,11 +984,10 @@ const getPromptConfig = (promptType) => {
 
 // Função para gerar embeddings (para RAG)
 const generateEmbedding = async (text) => {
-  const response = await fetch('https://api.openai.com/v1/embeddings', {
+  const response = await fetch('/api/openai/embeddings', {
     method: 'POST',
     headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${API_KEY}`
+      'Content-Type': 'application/json'
     },
     body: JSON.stringify({
       model: 'text-embedding-ada-002',
@@ -1008,24 +1011,66 @@ const retrieveRelevantChunks = async (query, promptType) => {
   return []; // Placeholder: retorne array de chunks
 };
 
-// Função para dividir texto semanticamente
-const semanticChunkText = (text, maxTokens = 1000) => {
-  // Implementação básica: dividir por parágrafos ou sentenças
-  const sentences = text.split(/[.!?]+/).filter(s => s.trim());
-  const chunks = [];
-  let currentChunk = '';
-  
-  for (const sentence of sentences) {
-    const potential = currentChunk + ' ' + sentence;
-    if (estimateTokens(potential) > maxTokens) {
-      if (currentChunk) chunks.push(currentChunk.trim());
-      currentChunk = sentence;
-    } else {
-      currentChunk = potential;
+// Função para implementar RAG básico para documentos jurídicos
+const selectRelevantDocumentChunks = (documents, contextType = 'apelacao-criminal', maxTotalTokens = 20000) => {
+  if (!documents || documents.length === 0) return '';
+
+  console.log(`🔍 Aplicando RAG para ${documents.length} documento(s), tipo: ${contextType}`);
+
+  let selectedContent = '';
+  let totalTokens = 0;
+
+  // Pesos por tipo de documento e seção jurídica
+  const relevanceWeights = {
+    'apelacao-criminal': {
+      'DOS FATOS': 10,
+      'DA SENTENÇA': 9,
+      'DO DIREITO': 8,
+      'DOS PEDIDOS': 7,
+      'DA APELAÇÃO': 6,
+      'DOS RECURSOS': 5,
+      'DA DECISÃO': 4,
+      'default': 1
+    }
+  };
+
+  const weights = relevanceWeights[contextType] || relevanceWeights['apelacao-criminal'];
+
+  for (const doc of documents) {
+    if (!doc.content) continue;
+
+    // Dividir documento em chunks semânticos
+    const chunks = semanticChunkText(doc.content, 2000); // Chunks menores para melhor seleção
+
+    // Pontuar chunks por relevância
+    const scoredChunks = chunks.map(chunk => {
+      let score = weights.default;
+      const upperChunk = chunk.toUpperCase();
+
+      for (const [section, weight] of Object.entries(weights)) {
+        if (section !== 'default' && upperChunk.includes(section)) {
+          score = Math.max(score, weight);
+          break;
+        }
+      }
+
+      return { chunk, score, tokens: estimateTokens(chunk) };
+    });
+
+    // Ordenar por pontuação (mais relevante primeiro)
+    scoredChunks.sort((a, b) => b.score - a.score);
+
+    // Selecionar chunks até o limite de tokens
+    for (const { chunk, tokens } of scoredChunks) {
+      if (totalTokens + tokens > maxTotalTokens) break;
+
+      selectedContent += `\n\n--- ${doc.fileName} ---\n${chunk}`;
+      totalTokens += tokens;
     }
   }
-  if (currentChunk) chunks.push(currentChunk.trim());
-  return chunks;
+
+  console.log(`✅ RAG concluído: ${totalTokens} tokens selecionados de ${documents.length} documento(s)`);
+  return selectedContent;
 };
 
 // Função para gerar resposta grande com múltiplas requisições
@@ -1094,7 +1139,20 @@ Continue gerando novo conteúdo a partir daqui.`;
         const errorData = await response.json().catch(() => ({}));
         console.error(`❌ Erro na parte ${i}:`, errorData);
         
-        // Se houver erro, retornar o que foi gerado até agora
+        // Verificar se é erro de rate limit
+        if (response.status === 429 && errorData.error?.message?.includes('Rate limit')) {
+          const retryAfter = errorData.error?.message?.match(/try again in (\d+\.?\d*)s/)?.[1];
+          const waitTime = retryAfter ? parseFloat(retryAfter) * 1000 + 1000 : 10000; // adicionar 1s extra
+          
+          console.log(`⏳ Rate limit atingido. Aguardando ${waitTime/1000}s antes de tentar novamente...`);
+          await new Promise(resolve => setTimeout(resolve, waitTime));
+          
+          // Tentar novamente a mesma parte
+          i--; // decrementar para tentar novamente
+          continue;
+        }
+        
+        // Se houver erro não relacionado a rate limit, retornar o que foi gerado até agora
         if (results.length > 0) {
           return {
             success: true,
@@ -1121,7 +1179,8 @@ Continue gerando novo conteúdo a partir daqui.`;
       
       // Pausa entre requisições para evitar rate limiting
       if (i < NUM_PARTS) {
-        await new Promise(resolve => setTimeout(resolve, 1500));
+        const delay = promptType === 'apelacao-criminal' ? 3000 : 1500; // 3 segundos para apelações criminais
+        await new Promise(resolve => setTimeout(resolve, delay));
       }
     }
     
